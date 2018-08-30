@@ -69,7 +69,17 @@ func main() {
 	caseinfo = r1.FindStringSubmatch(x)[1]
 	caseinfo, _ = vmRunS(vm, fmt.Sprintf(`JSON.stringify(%s)`, caseinfo))
 	_ = json.Unmarshal([]byte(caseinfo), &ccase)
-	fmt.Println(ccase)
+	//fmt.Println(ccase)
+
+	r1 = regexp.MustCompile(`jsonHtmlData\s?=\s?("\{.*\}");`)
+	caseinfo = r1.FindStringSubmatch(x)[1]
+	caseinfo, _ = vmRunS(vm, caseinfo)
+	//fmt.Println(caseinfo)
+	_ = json.Unmarshal([]byte(caseinfo), &ccase)
+	//fmt.Println(ccase)
+
+	b, _ := json.MarshalIndent(ccase, "", "  ")
+	fmt.Println(string(b))
 }
 
 // http://wenshu.court.gov.cn/content/content?DocID=d8952be5-e5a2-4b8b-b554-cccf5824617f&KeyWord=%E5%86%9C%E4%B8%9A%E7%A7%91%E5%AD%A6%E9%99%A2#
