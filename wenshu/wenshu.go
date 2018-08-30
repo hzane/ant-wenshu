@@ -24,28 +24,17 @@ import (
 )
 
 func main() {
+	rand.Seed(time.Now().Unix())
 	guid := GUID()
 
 	client := tools.NewHTTPClient2(time.Second*15, 2, nil, nil)
-	client.RewriteRequest = appendHeader
+	//client.RewriteRequest = appendHeader
 	number := GetCode(client, guid)
 	fmt.Println(guid, number)
 	vjkl5 := VJKL5(client, guid, number)
 	vl5x, err := vl5x(vjkl5)
 	fmt.Println(vjkl5, vl5x, err)
 	ListContent(client, vjkl5, vl5x, number, guid, 1, 5, "全文检索:农业科学院")
-}
-
-func appendHeader(req *http.Request) *http.Request {
-	req.Header.Set("Origin", host)
-	if req.Header.Get("Referer") == "" {
-		req.Header.Set("Referer", host)
-	}
-	//	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8")
-	//	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.8")
-	//	req.Header.Set("Accept-Encoding", "gzip, deflate")
-
-	return req
 }
 
 const codeURL = "http://wenshu.court.gov.cn/ValiCode/GetCode"
@@ -57,9 +46,9 @@ func GetCode(client *tools.Client, guid string) (number string) {
 	data.Set("guid", guid)
 
 	req, _ := http.NewRequest("POST", codeURL, bytes.NewBufferString(data.Encode()))
-	//req.Header.Set("Origin", host)
-	//req.Header.Set("Referer", host)
-	// req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("Origin", host)
+	req.Header.Set("Referer", host)
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := client.Do(req)
 	if err != nil {
@@ -78,11 +67,7 @@ func GUID() (string) {
 	uuid := make([]byte, 16)
 	rand.Read(uuid)
 
-	// variant bits; see section 4.1.1
-	uuid[8] = uuid[8]&^0xc0 | 0x80
-	// version 4 (pseudo-random); see section 4.1.3
-	uuid[6] = uuid[6]&^0xf0 | 0x40
-	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:])
+	return fmt.Sprintf("%x-%x-%x%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:])
 }
 
 type wenshu struct {
@@ -117,7 +102,9 @@ func VJKL5(client *tools.Client, guid, number string) (string) {
 	uri := fmt.Sprintf(listURL, number, guid, url.QueryEscape("全文检索:农业科学院"))
 
 	req, _ := http.NewRequest("GET", uri, nil)
-	//req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.8")
+
 
 	resp, err := client.Do(req)
 	_, _ = resp, err
@@ -168,12 +155,16 @@ func ListContent(client *tools.Client, vjkl5, vl5x, number, guid string,
 	body.Set("Order", "法院层级")
 	body.Set("Direction", "asc")
 	body.Set("vl5x", vl5x)
-	body.Set("number", "&gui")
+	body.Set("number", number)
 	body.Set("guid", guid)
 	body.Set("Param", param)
 	req, _ := http.NewRequest("POST", uri, bytes.NewBufferString(body.Encode()))
-	req.Header.Set("Refer", refer)
+	req.Header.Set("Referer", refer)
 	req.Header.Add("Cookie", "vjkl5="+vjkl5)
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println(err)
@@ -198,12 +189,13 @@ func DecodeListContent(src string) string {
 func vl5x(vjkl5 string) (string, error) {
 
 	vm := otto.New()
-	compile(vm, path.Join(config.js, `md5.js`),
-		path.Join(config.js, `sha1.js`),
-		path.Join(config.js, `base64.js`),
-		path.Join(config.js, `vl5x.js`))
+	//	compile(vm, path.Join(config.js, `md5.js`),
+	//		path.Join(config.js, `sha1.js`),
+	//		path.Join(config.js, `base64.js`),
+	//		path.Join(config.js, `vl5x.js`))
+	compile(vm, path.Join(config.js, "vl5x.js"))
 
-	value, err := vm.Run(`vl5x("a9993e364706816aba3e25717850c26c9cd0d89d");`)
+	value, err := vm.Run(fmt.Sprintf(`GetVl5x("%v")`, vjkl5))
 	if err != nil {
 		return "", err
 	}
