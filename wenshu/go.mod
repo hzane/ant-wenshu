@@ -9,6 +9,7 @@ require (
 	github.com/d4l3k/messagediff v1.2.1 // indirect
 	github.com/disintegration/imaging v1.5.0 // indirect
 	github.com/gorilla/websocket v1.3.0 // indirect
+	github.com/juju/errors v0.0.0-20180726005433-812b06ada177
 	github.com/leemcloughlin/gofarmhash v0.0.0-20160919192320-0a055c5b87a8 // indirect
 	github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329 // indirect
 	github.com/mkenney/go-chrome v1.0.0-rc4 // indirect
