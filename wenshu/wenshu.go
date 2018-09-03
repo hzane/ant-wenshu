@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -17,12 +18,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/otiai10/gosseract"
+
 	"github.com/robertkrimen/otto"
 	"gitlab.com/hearts.zhang/tools"
-
 	// _ "github.com/robertkrimen/otto/underscore"
-
-	"github.com/juju/errors"
 )
 
 func mainx() {
@@ -50,7 +50,7 @@ func treeListDemo() {
 // 赔偿案件
 // 行政案件
 // 民事案件
-func mainz() {
+func main() {
 	rand.Seed(time.Now().Unix())
 	guid := GUID()
 	client := tools.NewHTTPClient2(time.Second*15, 2, nil, nil)
@@ -81,16 +81,16 @@ func mainz() {
 		for _, typi := range items["文书类型"] {
 			params := params + ",文书类型:" + typi.key
 			ids, err := ListContent(client, number, guid, 1, 20, params+",法院层级:最高法院")
+
 			log.Println("list-content", params, len(ids), err)
 
 			for _, instance := range items["审判程序"] {
 				params := params + ",审判程序:" + instance.key
 
 				for _, high := range items["法院地域"] {
-					_ = high
-					// params := params + ",法院层级:高级法院,法院地域:" + high.key
-					// ids, err = ListContent(client, number, guid, 1, 20, params)
-
+					params := params + ",法院层级:高级法院,法院地域:" + high.key
+					ids, err = ListContent(client, number, guid, 1, 20, params)
+					log.Println("list-c", params, len(ids), err)
 				}
 				for _, intermediate := range items["中级法院"] {
 					_ = intermediate
@@ -168,7 +168,7 @@ func courtExpand(client *tools.Client, params, guid, number string, ret map[stri
 		_ = treeExpand(client, CourtTreeContentURL, params+",法院地域:"+f.key, f.key, guid, number, t)
 		for _, f := range t["中级法院"] {
 			ret["中级法院"] = append(ret["中级法院"], f)
-			_ = treeExpand(client, CourtTreeContentURL, params+",中级法院:"+f.key, f.key, guid, number, ret)
+			//			_ = treeExpand(client, CourtTreeContentURL, params+",中级法院:"+f.key, f.key, guid, number, ret)
 		}
 
 	}
@@ -243,6 +243,7 @@ func JSONStringBody(r io.Reader) (ret string, err error) {
 	return
 }
 
+// VL5X ...
 func VL5X(client *tools.Client) string {
 	vjkl5 := GetVJKL5FromCookie(client)
 	ret, _ := vl5x(vjkl5)
@@ -323,6 +324,7 @@ func CaseContent(docid string) {
 
 }
 
+// AESKey ...
 // https://www.jianshu.com/p/1dc99e3d927c
 func AESKey(runeval string) (key string, err error) {
 	vm := otto.New()
@@ -375,6 +377,9 @@ var (
 	TreeContentURL       = host + "/List/TreeContent"
 	ReasonTreeContentURL = host + "/List/ReasonTreeContent"
 	CourtTreeContentURL  = host + "/List/CourtTreeContent"
+	ValidateCodeURL      = host + "/User/ValidateCode"
+	CheckCodeURL         = host + "/Content/CheckVisitCode"
+	VisitRemindURL       = host + "/Html_Pages/VisitRemind.html"
 )
 
 // GetCode ...
@@ -407,6 +412,7 @@ func GUID() string {
 	return fmt.Sprintf("%x-%x-%x%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:])
 }
 
+// CaseSummary ...
 type CaseSummary struct {
 	ID       string `json:"_id,omitempty"`
 	Name     string `json:"案件名称"`
@@ -443,6 +449,7 @@ guid=8bcbcecd-25f9-5922503e-d48918ba0c39' --compressed
 func ListContent(client *tools.Client, number, guid string,
 	index, page int,
 	param string) (ids []string, err error) {
+
 	// uri := "http://wenshu.court.gov.cn/List/ListContent"
 	// refer := fmt.Sprintf(listURL, number, guid, url.QueryEscape(param))
 	body := url.Values{}
@@ -475,7 +482,8 @@ func ListContent(client *tools.Client, number, guid string,
 	}
 
 	if strings.HasPrefix(c, "remind") {
-		err = errors.Forbiddenf(c)
+		err = errors.New(c)
+		ValidateCode(client)
 		return
 	}
 
@@ -528,6 +536,52 @@ func compile(vm *otto.Otto, files ...string) {
 			vm.Run(string(bjs))
 		}
 	}
+}
+
+// ValidateCode ...
+func ValidateCode(client *tools.Client) (err error) {
+	//req, _ := http.NewRequest("POST", ValidateCodeURL, )
+	resp, err := client.Get(ValidateCodeURL, "")
+	if err != nil {
+		return
+	}
+	body, _ := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		err = errors.New(resp.Status)
+		return
+	}
+	log.Println(resp.ContentLength, resp.StatusCode, resp.Header.Get("content-type"))
+
+	ocr := gosseract.NewClient()
+	defer ocr.Close()
+	ocr.SetWhitelist("0123456789")
+	err = ocr.SetImageFromBytes(body)
+	if err != nil {
+		return
+	}
+
+	text, err := ocr.Text()
+	if err != nil {
+		return
+	}
+	code := url.Values{
+		"ValidateCode": []string{text},
+	}
+	//Html_Pages/VisitRemind.html
+	req, _ := http.NewRequest("POST", CheckCodeURL, bytes.NewBufferString(code.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Referer", VisitRemindURL)
+
+	resp, err = client.Do(req)
+	if err != nil {
+		return
+	}
+	log.Println("validate-code", resp.StatusCode, resp.Status, text)
+	ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	return nil
 }
 
 func init() {

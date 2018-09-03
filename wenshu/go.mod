@@ -37,7 +37,7 @@ require (
 	github.com/nbutton23/zxcvbn-go v0.0.0-20180510020640-780cc39d5c78 // indirect
 	github.com/nicksnyder/go-i18n v1.10.0 // indirect
 	github.com/opennota/check v0.0.0-20180822054640-d4582481d7dc // indirect
-	github.com/otiai10/gosseract v2.2.0+incompatible // indirect
+	github.com/otiai10/gosseract v2.2.0+incompatible
 	github.com/pelletier/go-toml v1.2.0 // indirect
 	github.com/ramya-rao-a/go-outline v0.0.0-20170803230019-9e9d089bb61a // indirect
 	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d
