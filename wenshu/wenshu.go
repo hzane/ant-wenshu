@@ -28,7 +28,7 @@ import (
 func mainx() {
 	rand.Seed(time.Now().Unix())
 	guid := GUID()
-	client := tools.NewHTTPClient2(time.Second*15, 2, nil, nil)
+	client := tools.NewHTTPClient(tools.HCTimeout(time.Second * 15))
 
 	number := GetCode(client, guid)
 	log.Println(guid, number)
@@ -53,7 +53,7 @@ func treeListDemo() {
 func main() {
 	rand.Seed(time.Now().Unix())
 	guid := GUID()
-	client := tools.NewHTTPClient2(time.Second*15, 2, nil, nil)
+	client := tools.NewHTTPClient()
 	Home(client)
 	Criminal(client)
 
@@ -76,35 +76,42 @@ func main() {
 	err = courtExpand(client, params, guid, number, items)
 	_ = err
 
-	for _, year := range items["裁判年份"] {
-		params := params + ",裁判年份:" + year.key
-		for _, typi := range items["文书类型"] {
-			params := params + ",文书类型:" + typi.key
-			ids, err := ListContent(client, number, guid, 1, 20, params+",法院层级:最高法院")
-
-			log.Println("list-content", params, len(ids), err)
-
-			for _, instance := range items["审判程序"] {
-				params := params + ",审判程序:" + instance.key
-
-				for _, high := range items["法院地域"] {
-					params := params + ",法院层级:高级法院,法院地域:" + high.key
-					ids, err = ListContent(client, number, guid, 1, 20, params)
-					log.Println("list-c", params, len(ids), err)
-				}
-				for _, intermediate := range items["中级法院"] {
-					_ = intermediate
-					// params := params + ",法院层级:中级法院,法院地域:" + intermediate.key
-				}
-				for _, basic := range items["基层法院"] {
-					_ = basic
-					// params := params + ",法院层级:基层法院,法院地域:" + basic.key
-
-				}
-
-			}
+	for key, items := range items {
+		for _, item := range items {
+			fmt.Println(key, item.key, item.cnt)
 		}
 	}
+	/*
+		for _, year := range items["裁判年份"] {
+			params := params + ",裁判年份:" + year.key
+			for _, typi := range items["文书类型"] {
+				params := params + ",文书类型:" + typi.key
+				ids, err := ListContent(client, number, guid, 1, 20, params+",法院层级:最高法院")
+
+				log.Println("list-content", params, len(ids), err)
+
+				for _, instance := range items["审判程序"] {
+					params := params + ",审判程序:" + instance.key
+
+					for _, high := range items["法院地域"] {
+						params := params + ",法院层级:高级法院,法院地域:" + high.key
+						ids, err = ListContent(client, number, guid, 1, 20, params)
+						log.Println("list-c", params, len(ids), err)
+					}
+					for _, intermediate := range items["中级法院"] {
+						_ = intermediate
+						// params := params + ",法院层级:中级法院,法院地域:" + intermediate.key
+					}
+					for _, basic := range items["基层法院"] {
+						_ = basic
+						// params := params + ",法院层级:基层法院,法院地域:" + basic.key
+
+					}
+
+				}
+			}
+		}
+	*/
 }
 
 type filter struct {
@@ -125,6 +132,7 @@ func extract(item map[string]interface{}, ret map[string][]filter) {
 		extract(child.(map[string]interface{}), ret)
 	}
 }
+
 func verb(method, uri string, resp *http.Response, err error) {
 	var status string
 	var code int
@@ -134,12 +142,12 @@ func verb(method, uri string, resp *http.Response, err error) {
 	}
 	log.Println(cl, code, status, err, method, uri)
 }
+
 func treeExpand(client *tools.Client, uri, params, parval, guid, number string, ret map[string][]filter) (err error) {
 	body := url.Values{}
 	body.Set("Param", params)
 	body.Set("parval", parval)
 
-	// uri := `http://wenshu.court.gov.cn/List/TreeContent`
 	req, _ := http.NewRequest("POST", uri, bytes.NewBufferString(body.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
@@ -160,7 +168,10 @@ func treeExpand(client *tools.Client, uri, params, parval, guid, number string, 
 	}
 	return
 }
+func randSleep() {
+	time.Sleep(time.Millisecond * time.Duration(rand.Intn(1000)))
 
+}
 func courtExpand(client *tools.Client, params, guid, number string, ret map[string][]filter) error {
 	// uri := `https://wenshu.court.gov.cn/List/CourtTreeContent`
 	for _, f := range ret["法院地域"] {
@@ -168,7 +179,8 @@ func courtExpand(client *tools.Client, params, guid, number string, ret map[stri
 		_ = treeExpand(client, CourtTreeContentURL, params+",法院地域:"+f.key, f.key, guid, number, t)
 		for _, f := range t["中级法院"] {
 			ret["中级法院"] = append(ret["中级法院"], f)
-			//			_ = treeExpand(client, CourtTreeContentURL, params+",中级法院:"+f.key, f.key, guid, number, ret)
+			_ = treeExpand(client, CourtTreeContentURL, params+",中级法院:"+f.key, f.key, guid, number, ret)
+			randSleep()
 		}
 
 	}
@@ -267,6 +279,9 @@ func Criminal(client *tools.Client) {
 	if resp, err := client.Get(CriminalURL, host); err == nil {
 		io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()
+		for h, v := range resp.Header {
+			log.Println(h, ":", v[0])
+		}
 	}
 	vjkl5 := GetVJKL5FromCookie(client)
 	log.Println(vjkl5)
@@ -540,7 +555,7 @@ func compile(vm *otto.Otto, files ...string) {
 
 // ValidateCode ...
 func ValidateCode(client *tools.Client) (err error) {
-	//req, _ := http.NewRequest("POST", ValidateCodeURL, )
+	// req, _ := http.NewRequest("POST", ValidateCodeURL, )
 	resp, err := client.Get(ValidateCodeURL, "")
 	if err != nil {
 		return
@@ -568,7 +583,7 @@ func ValidateCode(client *tools.Client) (err error) {
 	code := url.Values{
 		"ValidateCode": []string{text},
 	}
-	//Html_Pages/VisitRemind.html
+	// Html_Pages/VisitRemind.html
 	req, _ := http.NewRequest("POST", CheckCodeURL, bytes.NewBufferString(code.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Referer", VisitRemindURL)

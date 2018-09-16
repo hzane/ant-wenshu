@@ -1,6 +1,6 @@
-module gitlab.com/hearts.zhang/wenshu
+module gitlab.com/hearts.zhang/wenshu-spiding/wenshu
 
-replace gitlab.com/hearts.zhang/tools v0.0.0 => ../tools
+replace gitlab.com/hearts.zhang/tools v0.0.0 => ../../tools
 
 require (
 	4d63.com/gochecknoglobals v0.0.0-20180528045811-9d4b45f35872 // indirect
