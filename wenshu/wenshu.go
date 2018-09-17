@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"regexp"
 	"strconv"
@@ -25,24 +27,128 @@ import (
 	// _ "github.com/robertkrimen/otto/underscore"
 )
 
-func mainx() {
-	rand.Seed(time.Now().Unix())
-	guid := GUID()
-	client := tools.NewHTTPClient(tools.HCTimeout(time.Second * 15))
+var info = log.Println
+
+func main() {
+	client, guid := tools.NewHTTPClient(), GUID()
+	Home(client)
+	Criminal(client) // 种上cookie
+	if config.showCookie {
+		vjkl5 := GetVJKL5FromCookie(client)
+		fmt.Println(vjkl5)
+	}
 
 	number := GetCode(client, guid)
-	log.Println(guid, number)
-	docids, _ := ListContent(client, number, guid, 1, 5, "全文检索:农业科学院")
-	for _, docid := range docids {
-		fmt.Println(docid)
+	if config.showCode {
+		fmt.Println(guid, number)
+	}
+
+	if config.params != "" {
+		_, cases, _ := ListContent(client, number, guid, 1, 5, config.params)
+		for _, cise := range cases {
+			//fmt.Println(pretty(cise))
+			json.NewEncoder(os.Stdout).Encode(cise)
+		}
+	}
+
+	if config.caseID != "" {
+		CaseContent(config.caseID)
 	}
 }
 
-func treeListDemo() {
-	vm := otto.New()
-	x, _ := vmRunS(vm, treelist)
-	x, _ = vmRunS(vm, fmt.Sprintf(`JSON.stringify(%s)`, x))
-	fmt.Println(x)
+func mainxii() {
+	rand.Seed(time.Now().Unix())
+	guid := GUID()
+	client := tools.NewHTTPClient()
+	Home(client)
+	Criminal(client) // 种上cookie
+
+	number := GetCode(client, guid)
+	log.Println(guid, number)
+	h, err := TreeList(client)
+	_ = h
+
+	params := "案件类型:刑事案件"
+	err = treeRoot(client, params, guid, number, map[string][]Parameter{})
+	_ = err
+
+	tf, err := os.Open(config.tree)
+	if err != nil {
+		info(err)
+		return
+	}
+
+	items := map[string][]Parameter{}
+	scanner := bufio.NewScanner(tf)
+	for scanner.Scan() {
+		if fields := strings.Fields(scanner.Text()); len(fields) == 3 {
+			items[fields[0]] = append(items[fields[0]], Parameter{key: fields[1]})
+		}
+	}
+	tf.Close()
+
+	/*
+	裁判年份
+	文书类型
+	审判程序
+	法院地域
+	中级法院
+	基层法院
+
+	一级案由
+	二级案由
+	三级案由
+	关键词
+
+	法院层级
+	*/
+	for _, year := range items["裁判年份"] {
+		params := params + ",裁判年份:" + year.key
+		for _, typi := range items["文书类型"] {
+			params := params + ",文书类型:" + typi.key
+			//ids, err := ListContent(client, number, guid, 1, 20, params+",法院层级:最高法院")
+
+			//log.Println("list-content", params, len(ids), err)
+
+			for _, instance := range items["审判程序"] {
+				params := params + ",审判程序:" + instance.key
+
+				for _, high := range items["法院地域"] {
+					params := params + ",法院层级:高级法院,法院地域:" + high.key
+					causeExpand(items, params)
+					//	ids, err = ListContent(client, number, guid, 1, 20, params)
+				}
+				for _, intermediate := range items["中级法院"] {
+					params := params + ",法院层级:中级法院,法院地域:" + intermediate.key
+					causeExpand(items, params)
+				}
+				for _, basic := range items["基层法院"] {
+					params := params + ",法院层级:基层法院,法院地域:" + basic.key
+					causeExpand(items, params)
+				}
+			}
+		}
+	}
+}
+func causeExpand(items map[string][]Parameter, params string) {
+	for _, cause := range items["一级案由"] {
+		params := params + ",一级案由:" + cause.key
+		info(params)
+	}
+	for _, cause := range items["二级案由"] {
+		params := params + ",二级案由:" + cause.key
+		info(params)
+
+	}
+	for _, cause := range items["三级案由"] {
+		params := params + ",三级案由:" + cause.key
+		info(params)
+
+	}
+	for _, cause := range items["关键词"] {
+		params := params + ",关键词:" + cause.key
+		info(params)
+	}
 }
 
 // http://wenshu.court.gov.cn/List/List?sorttype=1&conditions=searchWord+1+AJLX++案件类型:刑事案件
@@ -50,7 +156,7 @@ func treeListDemo() {
 // 赔偿案件
 // 行政案件
 // 民事案件
-func main() {
+func mainxi() {
 	rand.Seed(time.Now().Unix())
 	guid := GUID()
 	client := tools.NewHTTPClient()
@@ -62,15 +168,8 @@ func main() {
 	h, err := TreeList(client)
 	_ = h
 
-	var listKeywords = func(params string, items map[string][]filter) {
-		for _, keyword := range items["关键词"] {
-			_ = keyword
-		}
-	}
-	_ = listKeywords
-
 	params := "案件类型:刑事案件"
-	items := map[string][]filter{}
+	items := map[string][]Parameter{}
 	err = treeRoot(client, params, guid, number, items)
 	err = criminalCauseExpand(client, params, guid, number, items)
 	err = courtExpand(client, params, guid, number, items)
@@ -81,79 +180,70 @@ func main() {
 			fmt.Println(key, item.key, item.cnt)
 		}
 	}
-	/*
-		for _, year := range items["裁判年份"] {
-			params := params + ",裁判年份:" + year.key
-			for _, typi := range items["文书类型"] {
-				params := params + ",文书类型:" + typi.key
-				ids, err := ListContent(client, number, guid, 1, 20, params+",法院层级:最高法院")
 
-				log.Println("list-content", params, len(ids), err)
-
-				for _, instance := range items["审判程序"] {
-					params := params + ",审判程序:" + instance.key
-
-					for _, high := range items["法院地域"] {
-						params := params + ",法院层级:高级法院,法院地域:" + high.key
-						ids, err = ListContent(client, number, guid, 1, 20, params)
-						log.Println("list-c", params, len(ids), err)
-					}
-					for _, intermediate := range items["中级法院"] {
-						_ = intermediate
-						// params := params + ",法院层级:中级法院,法院地域:" + intermediate.key
-					}
-					for _, basic := range items["基层法院"] {
-						_ = basic
-						// params := params + ",法院层级:基层法院,法院地域:" + basic.key
-
-					}
-
-				}
-			}
-		}
-	*/
 }
 
-type filter struct {
+// Parameter ...
+type Parameter struct {
 	key string
 	cnt int
 }
 
-func extract(item map[string]interface{}, ret map[string][]filter) {
-	f, _ := item["Field"].(string)
-	k, _ := item["Key"].(string)
-	v, _ := item["IntValue"].(float64)
+// 列表的嵌套结构
+func treeItemConvert(item map[string]interface{}, ret map[string][]Parameter) {
+	f, _ := item["Field"].(string)     // 审判程序...
+	k, _ := item["Key"].(string)       // 民事案件
+	v, _ := item["IntValue"].(float64) // 案件数量
 	if f != "" && k != "" && v != 0 {
-		ret[f] = append(ret[f], filter{k, int(v)})
-		log.Println(f, k, v)
+		ret[f] = append(ret[f], Parameter{k, int(v)})
 	}
 	children, _ := item["Child"].([]interface{})
 	for _, child := range children {
-		extract(child.(map[string]interface{}), ret)
+		treeItemConvert(child.(map[string]interface{}), ret)
 	}
 }
 
-func verb(method, uri string, resp *http.Response, err error) {
-	var status string
-	var code int
-	var cl int64
-	if resp != nil {
-		status, code, cl = resp.Status, resp.StatusCode, resp.ContentLength
-	}
-	log.Println(cl, code, status, err, method, uri)
-}
-
-func treeExpand(client *tools.Client, uri, params, parval, guid, number string, ret map[string][]filter) (err error) {
-	body := url.Values{}
-	body.Set("Param", params)
-	body.Set("parval", parval)
-
+// SubmitForm ...
+func SubmitForm(client *tools.Client, uri string, body url.Values) (*http.Response, error) {
 	req, _ := http.NewRequest("POST", uri, bytes.NewBufferString(body.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
 	resp, err := client.Do(req)
 	verb("POST", uri, resp, err)
+	return resp, err
+}
+
+type opt = func(url.Values)
+
+func set(k, v string) opt {
+	return func(body url.Values) {
+		body.Set(k, v)
+	}
+}
+func Submit(client *tools.Client, uri string, params ...opt) (*http.Response, error) {
+	body := url.Values{}
+	for _, set := range params {
+		set(body)
+	}
+	return SubmitForm(client, uri, body)
+}
+
+func treeExpand(client *tools.Client,
+	uri string,
+	params string,
+	parval string,
+	guid, number string,
+	ret map[string][]Parameter) (err error) {
+
+	resp, err := Submit(client, uri, set("Param", params), set("parval", parval))
+	/*
+		body := url.Values{}
+		body.Set("Param", params)
+		body.Set("parval", parval)
+
+		resp, err := SubmitForm(client, uri, body)
+	*/
 	if err != nil {
 		return
 	}
@@ -164,18 +254,15 @@ func treeExpand(client *tools.Client, uri, params, parval, guid, number string, 
 	err = json.Unmarshal([]byte(content), &items)
 
 	for _, item := range items {
-		extract(item, ret)
+		treeItemConvert(item, ret)
 	}
 	return
 }
-func randSleep() {
-	time.Sleep(time.Millisecond * time.Duration(rand.Intn(1000)))
 
-}
-func courtExpand(client *tools.Client, params, guid, number string, ret map[string][]filter) error {
-	// uri := `https://wenshu.court.gov.cn/List/CourtTreeContent`
+// 高级法院 +中级法院 +基层法院
+func courtExpand(client *tools.Client, params, guid, number string, ret map[string][]Parameter) error {
 	for _, f := range ret["法院地域"] {
-		t := map[string][]filter{}
+		t := map[string][]Parameter{}
 		_ = treeExpand(client, CourtTreeContentURL, params+",法院地域:"+f.key, f.key, guid, number, t)
 		for _, f := range t["中级法院"] {
 			ret["中级法院"] = append(ret["中级法院"], f)
@@ -187,8 +274,8 @@ func courtExpand(client *tools.Client, params, guid, number string, ret map[stri
 	return nil
 }
 
-func criminalCauseExpand(client *tools.Client, params, guid, number string, ret map[string][]filter) error {
-	// uri := `https://wenshu.court.gov.cn/List/ReasonTreeContent`
+// 一级案由 +二级案由 +三级案由
+func criminalCauseExpand(client *tools.Client, params, guid, number string, ret map[string][]Parameter) error {
 	err := treeExpand(client, ReasonTreeContentURL, params+",一级案由:刑事案由", "刑事案由", guid, number, ret)
 	for _, filter := range ret["二级案由"] {
 		_ = treeExpand(client, ReasonTreeContentURL, params+",二级案由:"+filter.key, filter.key, guid, number, ret)
@@ -197,21 +284,27 @@ func criminalCauseExpand(client *tools.Client, params, guid, number string, ret 
 }
 
 // treeRoot ...
-func treeRoot(client *tools.Client, params string, guid, number string, ret map[string][]filter) (err error) {
-	// uri := `http://wenshu.court.gov.cn/List/TreeContent`
-	body := url.Values{}
-	body.Set("Param", params)
-	body.Set("vl5x", VL5X(client))
-	body.Set("guid", guid)
-	body.Set("number", number)
+// 初次请求检索树能够返回一个大纲
+// 将嵌套结构展开成平铺结构
+func treeRoot(client *tools.Client, params string, guid, number string, ret map[string][]Parameter) (err error) {
+	resp, err := Submit(client, TreeContentURL,
+		set("Param", params),
+		set("vl5x", VL5X(client)),
+		set("guid", guid),
+		set("number", number), )
+	/*	body := url.Values{}
+		body.Set("Param", params)
+		body.Set("vl5x", VL5X(client))
+		body.Set("guid", guid)
+		body.Set("number", number)
 
-	// uri := `http://wenshu.court.gov.cn/List/TreeContent`
-	req, _ := http.NewRequest("POST", TreeContentURL, bytes.NewBufferString(body.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+		req, _ := http.NewRequest("POST", TreeContentURL, bytes.NewBufferString(body.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+		req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
-	resp, err := client.Do(req)
-	verb("POST", TreeContentURL, resp, err)
+		resp, err := client.Do(req)
+		verb("POST", TreeContentURL, resp, err)
+	*/
 	if err != nil {
 		return
 	}
@@ -222,7 +315,7 @@ func treeRoot(client *tools.Client, params string, guid, number string, ret map[
 	err = json.Unmarshal([]byte(content), &items)
 
 	for _, item := range items {
-		extract(item, ret)
+		treeItemConvert(item, ret)
 	}
 	return
 }
@@ -261,6 +354,28 @@ func VL5X(client *tools.Client) string {
 	ret, _ := vl5x(vjkl5)
 	return ret
 }
+func CaseDetail(raw string) (summary, dir, detail map[string]interface{}) {
+	r1 := regexp.MustCompile(`stringify\((\{.*?\})\);`)
+	tmp := r1.FindStringSubmatch(raw)[1] // tmp is javascript json object, but we treat it as a json string
+	r1 = regexp.MustCompile(`\\/Date\((\d+)\)`)
+	tmp = r1.ReplaceAllString(tmp, `$1`)
+	//var ccase map[string]interface{}
+	_ = json.Unmarshal([]byte(tmp), &summary)
+
+	vm := otto.New()
+	r1 = regexp.MustCompile(`dirData\s=\s(\{.*?\});if`)
+	tmp = r1.FindStringSubmatch(raw)[1]
+	tmp, _ = vmRunS(vm, fmt.Sprintf(`JSON.stringify(%s)`, tmp))
+	_ = json.Unmarshal([]byte(tmp), &dir)
+
+	r1 = regexp.MustCompile(`jsonHtmlData\s?=\s?("\{.*\}");`)
+	tmp = r1.FindStringSubmatch(raw)[1]
+	tmp, _ = vmRunS(vm, tmp)
+	//fmt.Println(prettys(tmp))
+	_ = json.Unmarshal([]byte(tmp), &detail)
+
+	return
+}
 
 // GetVJKL5FromCookie ...
 func GetVJKL5FromCookie(client *tools.Client) string {
@@ -283,8 +398,6 @@ func Criminal(client *tools.Client) {
 			log.Println(h, ":", v[0])
 		}
 	}
-	vjkl5 := GetVJKL5FromCookie(client)
-	log.Println(vjkl5)
 }
 
 // Home ...
@@ -294,32 +407,6 @@ func Home(client *tools.Client) {
 		io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()
 	}
-}
-func caseExportDemo() {
-	x := casecontent
-	r1 := regexp.MustCompile(`stringify\((\{.*?\})\);`)
-	caseinfo := r1.FindStringSubmatch(x)[1] // caseinfo is javascript json object, but we treat it as a json string
-	r1 = regexp.MustCompile(`\\/Date\((\d+)\)`)
-	caseinfo = r1.ReplaceAllString(caseinfo, `$1`)
-	var ccase map[string]interface{}
-	_ = json.Unmarshal([]byte(caseinfo), &ccase)
-	// fmt.Println(ccase)
-
-	vm := otto.New()
-	r1 = regexp.MustCompile(`dirData\s=\s(\{.*?\});if`)
-	caseinfo = r1.FindStringSubmatch(x)[1]
-	caseinfo, _ = vmRunS(vm, fmt.Sprintf(`JSON.stringify(%s)`, caseinfo))
-	_ = json.Unmarshal([]byte(caseinfo), &ccase)
-	// fmt.Println(ccase)
-
-	r1 = regexp.MustCompile(`jsonHtmlData\s?=\s?("\{.*\}");`)
-	caseinfo = r1.FindStringSubmatch(x)[1]
-	caseinfo, _ = vmRunS(vm, caseinfo)
-	fmt.Println(prettys(caseinfo))
-	// fmt.Println(caseinfo)
-	// _ = json.Unmarshal([]byte(caseinfo), &ccase)
-
-	// fmt.Println(pretty(ccase))
 }
 
 func prettys(js string) string {
@@ -439,6 +526,7 @@ type CaseSummary struct {
 }
 
 // ListContent ...
+// 判决书列表
 /*
 curl 'http://wenshu.court.gov.cn/List/ListContent'
 -H 'Pragma: no-cache'
@@ -463,7 +551,7 @@ guid=8bcbcecd-25f9-5922503e-d48918ba0c39' --compressed
 */
 func ListContent(client *tools.Client, number, guid string,
 	index, page int,
-	param string) (ids []string, err error) {
+	param string) (ids []string, cases []map[string]interface{}, err error) {
 
 	// uri := "http://wenshu.court.gov.cn/List/ListContent"
 	// refer := fmt.Sprintf(listURL, number, guid, url.QueryEscape(param))
@@ -524,6 +612,7 @@ func ListContent(client *tools.Client, number, guid string,
 		x, _ := json.MarshalIndent(doc, "", "  ")
 		fmt.Println(string(x))
 	}
+	cases = result[1:]
 	return
 }
 
@@ -600,26 +689,34 @@ func ValidateCode(client *tools.Client) (err error) {
 }
 
 func init() {
+	rand.Seed(time.Now().Unix())
+
+	flag.BoolVar(&config.showCookie, "show-cookie", false, "")
+	flag.BoolVar(&config.showCode, "show-code", false, "")
+	flag.StringVar(&config.params, "params", "", "list content with params")
+	flag.StringVar(&config.caseID, "case-id", "", "show case details with id")
 	flag.StringVar(&config.js, "js-dir", ".", "javascript file folder")
-	flag.StringVar(&config.repo, "repo", "/repo/spiding/wenshu/repo", "")
-	flag.StringVar(&config.bootstrap, "bootstrap", "https://wenshu.court.gov.cn/", "")
-	flag.StringVar(&config.hostF, "host-file", "", "")
-	flag.StringVar(&config.cuckoo, "cuckoo", "/repo/spiding/wenshu/wenshu.cuckoo", "")
+	flag.StringVar(&config.repo, "repo", "wenshu/repo", "")
 	flag.StringVar(&config.domain, "domain", "wenshu.court.gov.cn", "")
 	flag.StringVar(&config.proxies, "proxies", "", "")
+	flag.StringVar(&config.tree, "tree", "trees.csv", "")
 	flag.IntVar(&config.workers, "workers", 1, "")
 
 	flag.Parse()
-
+	config.guid = GUID()
 }
 
 var config struct {
-	js        string
-	domain    string
-	hostF     string
-	bootstrap string
-	repo      string
-	cuckoo    string
-	proxies   string
-	workers   int
+	js         string
+	domain     string
+	repo       string
+	proxies    string
+	tree       string
+	params     string
+	caseID     string
+	guid       string
+	code       string
+	workers    int
+	showCookie bool
+	showCode   bool
 }

@@ -3,12 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
-	"testing"
-	"time"
-
 	"github.com/robertkrimen/otto"
 	"gitlab.com/hearts.zhang/tools"
+	"log"
+	"testing"
 )
 
 /*
@@ -19,14 +17,14 @@ const listcontent = `"[{\"RunEval\":\"w61aw5vCjsKCMBDDvRbCjA9tMMO7A8OEJz9hHycNMc
 func TestListContent(t *testing.T) {
 	t.Skip()
 	guid := GUID()
-	client := tools.NewHTTPClient2(time.Second*15, 2, nil, nil)
+	client := tools.NewHTTPClient()
 	Home(client)
 	Criminal(client)
 
 	number := GetCode(client, guid)
 	log.Println(guid, number)
 	TreeList(client)
-	ids, err := ListContent(client, number, guid, 1, 20, "案件类型:刑事案件,裁判年份:2018,审判程序:一审,法院层级:高级法院")
+	ids, _, err := ListContent(client, number, guid, 1, 20, "案件类型:刑事案件,裁判年份:2018,审判程序:一审,法院层级:高级法院")
 	t.Log(ids, err)
 }
 
