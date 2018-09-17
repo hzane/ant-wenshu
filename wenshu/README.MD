@@ -1,1 +1,1 @@
-> Thinks https://github.com/sixs/wenshu_spider
+> Inspired by https://github.com/sixs/wenshu_spider
