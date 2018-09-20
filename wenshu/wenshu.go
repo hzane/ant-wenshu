@@ -2,6 +2,9 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -13,9 +16,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/robertkrimen/otto"
@@ -39,10 +44,11 @@ func main() {
 	}
 
 	if config.params != "" {
-		_, cases, _ := ListContent(client, number, guid, 1, 20, config.params)
+		_, cases, cnt, _ := ListContent(client, number, guid, 1, config.pageSize, config.params)
 		for _, cese := range cases {
 			json.NewEncoder(os.Stdout).Encode(cese)
 		}
+		info("total count", cnt)
 	}
 
 	if config.caseID != "" {
@@ -78,7 +84,7 @@ func createParams(fn string) {
 	var c = len(items["法院地域"]) + len(items["中级法院"]) + len(items["基层法院"])
 	var d = len(items["一级案由"]) + len(items["二级案由"]) + len(items["三级案由"]) + len(items["关键词"])
 	info("total lines", a*b*c*d)
-	return
+
 	params := "案件类型:刑事案件"
 	/*
 	裁判年份
@@ -352,35 +358,6 @@ func CaseContent(client *tools.Client, docID string) (summary map[string]interfa
 	return
 }
 
-const host = "http://wenshu.court.gov.cn"
-
-// ...
-const (
-	CriminalURL          = host + "/List/List?sorttype=1&conditions=searchWord+1+AJLX++案件类型:刑事案件"
-	GetCodeURL           = host + "/ValiCode/GetCode"
-	TreeListURL          = host + "/List/TreeList"
-	ListContentURL       = host + "/List/ListContent"
-	TreeContentURL       = host + "/List/TreeContent"
-	ReasonTreeContentURL = host + "/List/ReasonTreeContent"
-	CourtTreeContentURL  = host + "/List/CourtTreeContent"
-	ValidateCodeURL      = host + "/User/ValidateCode"
-	CheckCodeURL         = host + "/Content/CheckVisitCode"
-	VisitRemindURL       = host + "/Html_Pages/VisitRemind.html"
-	CreateContentJSURL   = host + "/CreateContentJS/CreateContentJS.aspx"
-	ContentURL           = host + "/content/content"
-)
-
-// CaseSummary ...
-type CaseSummary struct {
-	ID       string `json:"_id,omitempty"`
-	Name     string `json:"案件名称"`
-	CaseType string `json:"案件类型"`
-	No       string `json:"案号"`
-	Court    string `json:"法院名称"`
-	Date     string `json:"裁判日期"`
-	Abstract string `json:"裁判要旨段原文"`
-}
-
 // ListContent ...
 // 判决书列表
 /*
@@ -407,7 +384,7 @@ guid=8bcbcecd-25f9-5922503e-d48918ba0c39' --compressed
 */
 func ListContent(client *tools.Client, number, guid string,
 	index, page int,
-	param string) (ids []string, cases []map[string]interface{}, err error) {
+	param string) (ids []string, cases []map[string]interface{}, cnt int, err error) {
 
 	resp, err := Submit(client, ListContentURL, set("Index", strconv.Itoa(index)),
 		set("Page", strconv.Itoa(page)),
@@ -443,7 +420,9 @@ func ListContent(client *tools.Client, number, guid string,
 	if err != nil {
 		return
 	}
-	cnt, _ := result[0]["Count"].(string)
+	scnt, _ := result[0]["Count"].(string)
+	cnt, _ = strconv.Atoi(scnt)
+
 	runeval, _ := result[0]["RunEval"].(string)
 	key, err := AESKey(runeval)
 	if err != nil {
@@ -458,8 +437,6 @@ func ListContent(client *tools.Client, number, guid string,
 		doc["_id"] = id
 		delete(doc, "文书ID")
 		ids = append(ids, id)
-		x, _ := json.MarshalIndent(doc, "", "  ")
-		fmt.Println(string(x))
 	}
 	cases = result[1:]
 	return
@@ -471,6 +448,7 @@ func init() {
 	flag.BoolVar(&config.showCookie, "show-cookie", false, "")
 	flag.BoolVar(&config.showCode, "show-code", false, "")
 	flag.BoolVar(&config.createTree, "create-tree", false, "create full tree")
+	flag.BoolVar(&config.createParams, "create-params", false, "")
 	flag.StringVar(&config.params, "params", "", "list content with params")
 	flag.StringVar(&config.caseID, "case-id", "", "show case details with id")
 	flag.StringVar(&config.js, "js-dir", ".", "javascript file folder")
@@ -478,6 +456,8 @@ func init() {
 	flag.StringVar(&config.proxies, "proxies", "", "")
 	flag.StringVar(&config.tree, "tree", "trees.csv", "")
 	flag.IntVar(&config.workers, "workers", 1, "")
+	flag.IntVar(&config.pageNo, "page-no", 1, "")
+	flag.IntVar(&config.pageSize, "page-size", 10, "")
 
 	flag.Parse()
 	config.guid = GUID()
@@ -493,8 +473,39 @@ var config struct {
 	guid         string
 	code         string
 	workers      int
+	pageSize     int
+	pageNo       int
 	showCookie   bool
 	showCode     bool
 	createTree   bool
 	createParams bool
+}
+
+const host = "http://wenshu.court.gov.cn"
+
+// ...
+const (
+	CriminalURL          = host + "/List/List?sorttype=1&conditions=searchWord+1+AJLX++案件类型:刑事案件"
+	GetCodeURL           = host + "/ValiCode/GetCode"
+	TreeListURL          = host + "/List/TreeList"
+	ListContentURL       = host + "/List/ListContent"
+	TreeContentURL       = host + "/List/TreeContent"
+	ReasonTreeContentURL = host + "/List/ReasonTreeContent"
+	CourtTreeContentURL  = host + "/List/CourtTreeContent"
+	ValidateCodeURL      = host + "/User/ValidateCode"
+	CheckCodeURL         = host + "/Content/CheckVisitCode"
+	VisitRemindURL       = host + "/Html_Pages/VisitRemind.html"
+	CreateContentJSURL   = host + "/CreateContentJS/CreateContentJS.aspx"
+	ContentURL           = host + "/content/content"
+)
+
+// CaseSummary ...
+type CaseSummary struct {
+	ID       string `json:"_id,omitempty"`
+	Name     string `json:"案件名称"`
+	CaseType string `json:"案件类型"`
+	No       string `json:"案号"`
+	Court    string `json:"法院名称"`
+	Date     string `json:"裁判日期"`
+	Abstract string `json:"裁判要旨段原文"`
 }
