@@ -2,9 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -16,11 +13,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/robertkrimen/otto"
@@ -30,6 +25,17 @@ import (
 var info = log.Println
 
 func main() {
+	if config.ant {
+		a, _ := NewAnt(config.repo)
+		info("loading tree...")
+		a.LoadTree(config.tree)
+		info("load status...")
+		a.Load()
+		info("booting ...")
+		a.Bootstrap()
+		a.Wait()
+		return
+	}
 	client, guid := tools.NewHTTPClient(), GUID()
 	Home(client)
 	Criminal(client) // 种上cookie
@@ -61,73 +67,9 @@ func main() {
 	if config.createParams {
 		createParams(config.tree)
 	}
+
 }
 
-func createParams(fn string) {
-	tf, err := os.Open(fn)
-	if err != nil {
-		info(err)
-		return
-	}
-
-	items := map[string][]Parameter{}
-	scanner := bufio.NewScanner(tf)
-	for scanner.Scan() {
-		if fields := strings.Fields(scanner.Text()); len(fields) == 3 {
-			items[fields[0]] = append(items[fields[0]], Parameter{key: fields[1]})
-		}
-	}
-	tf.Close()
-	info("items", len(items))
-	var a = len(items["裁判年份"])
-	var b = len(items["审判程序"])
-	var c = len(items["法院地域"]) + len(items["中级法院"]) + len(items["基层法院"])
-	var d = len(items["一级案由"]) + len(items["二级案由"]) + len(items["三级案由"]) + len(items["关键词"])
-	info("total lines", a*b*c*d)
-
-	params := "案件类型:刑事案件"
-	/*
-	裁判年份
-	文书类型
-	审判程序
-	法院地域
-	中级法院
-	基层法院
-
-	一级案由
-	二级案由
-	三级案由
-	关键词
-
-	法院层级
-	*/
-	for _, year := range items["裁判年份"] {
-		params := params + ",裁判年份:" + year.key + ",文书类型:" + "判决书"
-		//for _, typi := range items["文书类型"] {
-		//params := params + ",文书类型:" + typi.key
-		// ids, err := ListContent(client, number, guid, 1, 20, params+",法院层级:最高法院")
-
-		// log.Println("list-content", params, len(ids), err)
-
-		for _, instance := range items["审判程序"] {
-			params := params + ",审判程序:" + instance.key
-
-			for _, high := range items["法院地域"] {
-				params := params + ",法院层级:高级法院,法院地域:" + high.key
-				causeExpand(items, params)
-			}
-			for _, intermediate := range items["中级法院"] {
-				params := params + ",法院层级:中级法院,法院地域:" + intermediate.key
-				causeExpand(items, params)
-			}
-			for _, basic := range items["基层法院"] {
-				params := params + ",法院层级:基层法院,法院地域:" + basic.key
-				causeExpand(items, params)
-			}
-		}
-		//}
-	}
-}
 func causeExpand(items map[string][]Parameter, params string) {
 	for _, cause := range items["一级案由"] {
 		params := params + ",一级案由:" + cause.key
@@ -449,10 +391,11 @@ func init() {
 	flag.BoolVar(&config.showCode, "show-code", false, "")
 	flag.BoolVar(&config.createTree, "create-tree", false, "create full tree")
 	flag.BoolVar(&config.createParams, "create-params", false, "")
+	flag.BoolVar(&config.ant, "ant", false, "")
 	flag.StringVar(&config.params, "params", "", "list content with params")
 	flag.StringVar(&config.caseID, "case-id", "", "show case details with id")
 	flag.StringVar(&config.js, "js-dir", ".", "javascript file folder")
-	flag.StringVar(&config.repo, "repo", "wenshu", "")
+	flag.StringVar(&config.repo, "repo", "data", "")
 	flag.StringVar(&config.proxies, "proxies", "", "")
 	flag.StringVar(&config.tree, "tree", "trees.csv", "")
 	flag.IntVar(&config.workers, "workers", 1, "")
@@ -479,6 +422,7 @@ var config struct {
 	showCode     bool
 	createTree   bool
 	createParams bool
+	ant          bool
 }
 
 const host = "http://wenshu.court.gov.cn"
