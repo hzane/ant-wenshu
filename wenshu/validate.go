@@ -3,13 +3,13 @@ package main
 import (
 	"bytes"
 	"errors"
-	"github.com/otiai10/gosseract"
-	"gitlab.com/hearts.zhang/tools"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/otiai10/gosseract"
+	"gitlab.com/hearts.zhang/tools"
 )
 
 // ValidateCode ...
@@ -25,7 +25,7 @@ func ValidateCode(client *tools.Client) (err error) {
 		err = errors.New(resp.Status)
 		return
 	}
-	log.Println(resp.ContentLength, resp.StatusCode, resp.Header.Get("content-type"))
+	info(resp.ContentLength, resp.StatusCode, resp.Header.Get("content-type"))
 
 	ocr := gosseract.NewClient()
 	defer ocr.Close()
@@ -60,10 +60,9 @@ func ValidateCode(client *tools.Client) (err error) {
 	if err != nil {
 		return
 	}
-	log.Println("validate-code", resp.StatusCode, resp.Status, text)
+	info("validate-code", resp.StatusCode, resp.Status, text)
 	ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 
 	return nil
 }
-

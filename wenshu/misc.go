@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -127,7 +126,6 @@ func AESKey(runeval string) (key string, err error) {
 	if err != nil {
 		return
 	}
-	log.Println(jss)
 
 	r := regexp.MustCompile(`_\[_\]\[_\]\((.*?)\)\(\);`)
 	xs := r.FindStringSubmatch(statements[1])[1]
@@ -157,8 +155,8 @@ func GetCode(client *tools.Client, guid string) (number string) {
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := client.Do(req)
+	infoe(err, "get-code")
 	if err != nil {
-		log.Println(err)
 		return
 	}
 	defer resp.Body.Close()
@@ -201,4 +199,3 @@ func compile(vm *otto.Otto, files ...string) {
 		}
 	}
 }
-

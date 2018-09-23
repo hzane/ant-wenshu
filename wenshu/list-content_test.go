@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"testing"
+
 	"github.com/robertkrimen/otto"
 	"gitlab.com/hearts.zhang/tools"
-	"log"
-	"testing"
 )
 
 /*
@@ -22,10 +22,10 @@ func TestListContent(t *testing.T) {
 	Criminal(client)
 
 	number := GetCode(client, guid)
-	log.Println(guid, number)
+	info(guid, number)
 	TreeList(client)
-	ids, _, err := ListContent(client, number, guid, 1, 20, "案件类型:刑事案件,裁判年份:2018,审判程序:一审,法院层级:高级法院")
-	t.Log(ids, err)
+	sc, _, cnt, err := ListContent(client, number, guid, 1, 20, "案件类型:刑事案件,裁判年份:2018,审判程序:一审,法院层级:高级法院")
+	t.Log(sc, cnt, err)
 }
 
 func TestDecodeListContent(t *testing.T) {
@@ -41,7 +41,7 @@ func TestDecodeListContent(t *testing.T) {
 	cnt, _ := result[0]["Count"].(string)
 	runeval, _ := result[0]["RunEval"].(string)
 	key, _ := AESKey(runeval)
-	log.Println(cnt, key)
+	info(cnt, key)
 	for _, doc := range result[1:] {
 		id, _ := doc["文书ID"].(string)
 		s, _ := vm.Run(fmt.Sprintf(`DecryptDocID("%v","%v");`, key, id))

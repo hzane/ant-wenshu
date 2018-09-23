@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -26,14 +25,7 @@ var info = log.Println
 
 func main() {
 	if config.ant {
-		a, _ := NewAnt(config.repo)
-		info("loading tree...")
-		a.LoadTree(config.tree)
-		info("load status...")
-		a.Load()
-		info("booting ...")
-		a.Bootstrap()
-		a.Wait()
+		AntAll(config.repo, config.tree)
 		return
 	}
 	client, guid := tools.NewHTTPClient(), GUID()
@@ -64,31 +56,6 @@ func main() {
 	if config.createTree {
 		createTree(client, guid, number)
 	}
-	if config.createParams {
-		createParams(config.tree)
-	}
-
-}
-
-func causeExpand(items map[string][]Parameter, params string) {
-	for _, cause := range items["一级案由"] {
-		params := params + ",一级案由:" + cause.key
-		fmt.Println(params)
-	}
-	for _, cause := range items["二级案由"] {
-		params := params + ",二级案由:" + cause.key
-		fmt.Println(params)
-
-	}
-	for _, cause := range items["三级案由"] {
-		params := params + ",三级案由:" + cause.key
-		fmt.Println(params)
-
-	}
-	for _, cause := range items["关键词"] {
-		params := params + ",关键词:" + cause.key
-		fmt.Println(params)
-	}
 }
 
 // http://wenshu.court.gov.cn/List/List?sorttype=1&conditions=searchWord+1+AJLX++案件类型:刑事案件
@@ -101,18 +68,18 @@ func createTree(client *tools.Client, guid, number string) {
 	Criminal(client)
 
 	_, err := TreeList(client)
-	printerr(err)
+	infoe(err, "tree-list")
 
 	params := "案件类型:刑事案件"
-	items := map[string][]Parameter{}
+	items := map[string][]Tag{}
 	err = treeRoot(client, params, guid, number, items)
-	printerr(err)
+	infoe(err, "tree-root")
 
 	err = criminalCauseExpand(client, params, guid, number, items)
-	printerr(err)
+	infoe(err, "cause-expand")
 
 	err = courtExpand(client, params, guid, number, items)
-	printerr(err)
+	infoe(err, "court-expand")
 
 	for key, items := range items {
 		for _, item := range items {
@@ -122,25 +89,19 @@ func createTree(client *tools.Client, guid, number string) {
 
 }
 
-func printerr(err error) {
-	if err != nil {
-		info(err)
-	}
-}
-
-// Parameter ...
-type Parameter struct {
+// Tag ...
+type Tag struct {
 	key string
 	cnt int
 }
 
 // 列表的嵌套结构
-func treeItemConvert(item map[string]interface{}, ret map[string][]Parameter) {
+func treeItemConvert(item map[string]interface{}, ret map[string][]Tag) {
 	f, _ := item["Field"].(string)     // 审判程序...
 	k, _ := item["Key"].(string)       // 民事案件
 	v, _ := item["IntValue"].(float64) // 案件数量
 	if f != "" && k != "" && v != 0 {
-		ret[f] = append(ret[f], Parameter{k, int(v)})
+		ret[f] = append(ret[f], Tag{k, int(v)})
 	}
 	children, _ := item["Child"].([]interface{})
 	for _, child := range children {
@@ -153,7 +114,7 @@ func treeExpand(client *tools.Client,
 	params string,
 	parval string,
 	guid, number string,
-	ret map[string][]Parameter) (err error) {
+	ret map[string][]Tag) (err error) {
 
 	resp, err := Submit(client, uri, set("Param", params), set("parval", parval))
 	if err != nil {
@@ -172,9 +133,9 @@ func treeExpand(client *tools.Client,
 }
 
 // 高级法院 +中级法院 +基层法院
-func courtExpand(client *tools.Client, params, guid, number string, ret map[string][]Parameter) error {
+func courtExpand(client *tools.Client, params, guid, number string, ret map[string][]Tag) error {
 	for _, f := range ret["法院地域"] {
-		t := map[string][]Parameter{}
+		t := map[string][]Tag{}
 		_ = treeExpand(client, CourtTreeContentURL, params+",法院地域:"+f.key, f.key, guid, number, t)
 		for _, f := range t["中级法院"] {
 			ret["中级法院"] = append(ret["中级法院"], f)
@@ -187,7 +148,7 @@ func courtExpand(client *tools.Client, params, guid, number string, ret map[stri
 }
 
 // 一级案由 +二级案由 +三级案由
-func criminalCauseExpand(client *tools.Client, params, guid, number string, ret map[string][]Parameter) error {
+func criminalCauseExpand(client *tools.Client, params, guid, number string, ret map[string][]Tag) error {
 	err := treeExpand(client, ReasonTreeContentURL, params+",一级案由:刑事案由", "刑事案由", guid, number, ret)
 	for _, filter := range ret["二级案由"] {
 		_ = treeExpand(client, ReasonTreeContentURL, params+",二级案由:"+filter.key, filter.key, guid, number, ret)
@@ -198,7 +159,7 @@ func criminalCauseExpand(client *tools.Client, params, guid, number string, ret 
 // treeRoot ...
 // 初次请求检索树能够返回一个大纲
 // 将嵌套结构展开成平铺结构
-func treeRoot(client *tools.Client, params string, guid, number string, ret map[string][]Parameter) (err error) {
+func treeRoot(client *tools.Client, params string, guid, number string, ret map[string][]Tag) (err error) {
 	resp, err := Submit(client, TreeContentURL,
 		set("Param", params),
 		set("vl5x", VL5X(client)),
@@ -258,9 +219,7 @@ func Criminal(client *tools.Client) {
 	if resp, err := client.Get(CriminalURL, host); err == nil {
 		io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()
-		for h, v := range resp.Header {
-			log.Println(h, ":", v[0])
-		}
+		info(resp.StatusCode, resp.Status, CriminalURL)
 	}
 }
 
@@ -270,6 +229,7 @@ func Home(client *tools.Client) {
 	if resp, err := client.Get(host, ""); err == nil {
 		io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()
+		info(resp.StatusCode, resp.Status, host)
 	}
 }
 
@@ -326,7 +286,7 @@ guid=8bcbcecd-25f9-5922503e-d48918ba0c39' --compressed
 */
 func ListContent(client *tools.Client, number, guid string,
 	index, page int,
-	param string) (ids []string, cases []map[string]interface{}, cnt int, err error) {
+	param string) (sc int, cases []map[string]interface{}, cnt int, err error) {
 
 	resp, err := Submit(client, ListContentURL, set("Index", strconv.Itoa(index)),
 		set("Page", strconv.Itoa(page)),
@@ -341,8 +301,15 @@ func ListContent(client *tools.Client, number, guid string,
 		return
 	}
 	defer resp.Body.Close()
+	sc = resp.StatusCode
+
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("%d %s", resp.StatusCode, resp.Status)
+		info(string(b))
 		return
 	}
 	vm := otto.New()
@@ -362,15 +329,23 @@ func ListContent(client *tools.Client, number, guid string,
 	if err != nil {
 		return
 	}
+	if len(result) == 0 {
+		info(string(b))
+		return
+	}
 	scnt, _ := result[0]["Count"].(string)
 	cnt, _ = strconv.Atoi(scnt)
+	if cnt == 0 {
+		info(c)
+	}
 
 	runeval, _ := result[0]["RunEval"].(string)
 	key, err := AESKey(runeval)
 	if err != nil {
 		return
 	}
-	log.Println(cnt, key)
+	info("aes-key", key, err)
+
 	compile(vm, "docid.js")
 	for _, doc := range result[1:] {
 		id, _ := doc["文书ID"].(string)
@@ -378,7 +353,6 @@ func ListContent(client *tools.Client, number, guid string,
 		id, _ = s.ToString()
 		doc["_id"] = id
 		delete(doc, "文书ID")
-		ids = append(ids, id)
 	}
 	cases = result[1:]
 	return
@@ -400,7 +374,7 @@ func init() {
 	flag.StringVar(&config.tree, "tree", "trees.csv", "")
 	flag.IntVar(&config.workers, "workers", 1, "")
 	flag.IntVar(&config.pageNo, "page-no", 1, "")
-	flag.IntVar(&config.pageSize, "page-size", 10, "")
+	flag.IntVar(&config.pageSize, "page-size", 5, "")
 
 	flag.Parse()
 	config.guid = GUID()
