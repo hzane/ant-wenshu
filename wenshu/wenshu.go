@@ -42,7 +42,7 @@ func main() {
 	}
 
 	if config.params != "" {
-		_, cases, cnt, _ := ListContent(client, number, guid, 1, config.pageSize, config.params)
+		_, cases, cnt, _ := ListContent(client, number, guid, config.pageNo, config.pageSize, config.params)
 		for _, cese := range cases {
 			json.NewEncoder(os.Stdout).Encode(cese)
 		}
@@ -309,7 +309,6 @@ func ListContent(client *tools.Client, number, guid string,
 	}
 	if resp.StatusCode != http.StatusOK {
 		err = fmt.Errorf("%d %s", resp.StatusCode, resp.Status)
-		info(string(b))
 		return
 	}
 	vm := otto.New()
@@ -319,6 +318,7 @@ func ListContent(client *tools.Client, number, guid string,
 	}
 
 	if strings.HasPrefix(c, "remind") {
+		sc = http.StatusInternalServerError
 		err = errors.New(c)
 		ValidateCode(client)
 		return
@@ -330,14 +330,10 @@ func ListContent(client *tools.Client, number, guid string,
 		return
 	}
 	if len(result) == 0 {
-		info(string(b))
 		return
 	}
 	scnt, _ := result[0]["Count"].(string)
 	cnt, _ = strconv.Atoi(scnt)
-	if cnt == 0 {
-		info(c)
-	}
 
 	runeval, _ := result[0]["RunEval"].(string)
 	key, err := AESKey(runeval)
@@ -374,7 +370,7 @@ func init() {
 	flag.StringVar(&config.tree, "tree", "trees.csv", "")
 	flag.IntVar(&config.workers, "workers", 1, "")
 	flag.IntVar(&config.pageNo, "page-no", 1, "")
-	flag.IntVar(&config.pageSize, "page-size", 5, "")
+	flag.IntVar(&config.pageSize, "page-size", 10, "")
 
 	flag.Parse()
 	config.guid = GUID()

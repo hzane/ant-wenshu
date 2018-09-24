@@ -68,27 +68,27 @@ func AntAll(repo, treefn string) (err error) {
 	// 裁判年份	文书类型	审判程序	法院地域	中级法院	基层法院
 	// 一级案由	二级案由	三级案由	关键词	法院层级
 
-	for _, year := range a.categories["裁判年份"] {
-		params := params + ",裁判年份:" + year.key + ",文书类型:" + "判决书"
+	// 	for _, year := range a.categories["裁判年份"] {
+	// 	params = params + ",文书类型:" + "判决书"
 
-		for _, instance := range a.categories["审判程序"] {
-			params := params + ",审判程序:" + instance.key
+	// 	for _, instance := range a.categories["审判程序"] {
+	// 		params := params + ",审判程序:" + instance.key
 
-			for _, high := range a.categories["法院地域"] {
-				t, _ := a.LoadNew(params+",法院层级:高级法院,法院地域:"+high.key, 1, config.pageSize)
-				a.Query(t, true)
-			}
-
-			for _, intermediate := range a.categories["中级法院"] {
-				t, _ := a.LoadNew(params+",法院层级:中级法院,法院地域:"+intermediate.key, 1, config.pageSize)
-				a.Query(t, true)
-			}
-			for _, basic := range a.categories["基层法院"] {
-				t, _ := a.LoadNew(params+",法院层级:基层法院,法院地域:"+basic.key, 1, config.pageSize)
-				a.Query(t, true)
-			}
-		}
+	for _, high := range a.categories["法院地域"] {
+		t, _ := a.LoadNew(params+",法院层级:高级法院,法院地域:"+high.key, 1, config.pageSize)
+		a.Query(t, true)
 	}
+
+	for _, intermediate := range a.categories["中级法院"] {
+		t, _ := a.LoadNew(params+",法院层级:中级法院,中级法院:"+intermediate.key, 1, config.pageSize)
+		a.Query(t, true)
+	}
+	for _, basic := range a.categories["基层法院"] {
+		t, _ := a.LoadNew(params+",法院层级:基层法院,基层法院:"+basic.key, 1, config.pageSize)
+		a.Query(t, true)
+	}
+	// 	}
+	// 	}
 	return
 }
 
@@ -163,16 +163,22 @@ func (a *ant) LoadNew(params string, pn, psz int) (t *task, ok bool) {
 func (a *ant) Query(t *task, expand bool) {
 	info(t.Params, t.CaseCount, t.PageNo)
 	var cases []map[string]interface{}
-	if t.StatusCode == 0 {
+	var tries int
+	for (t.StatusCode == 0 || t.StatusCode >= http.StatusInternalServerError) && tries < 10 {
 		t.StatusCode, cases, t.CaseCount, t.error = ListContent(a.client, a.number, a.guid, t.PageNo, t.PageSize, t.Params)
 		info("cases", len(cases), "total:", t.CaseCount, "page-no", t.PageNo, t.error)
 
 		a.SaveCases(cases)
 		json.NewEncoder(a.tasks).Encode(t)
-		time.Sleep(time.Millisecond * time.Duration(rand.Intn(1000)+1000))
+		time.Sleep(time.Millisecond * time.Duration(rand.Intn(5000)+2000))
+		tries++
+		if t.StatusCode >= http.StatusInternalServerError {
+			a.guid = GUID()
+			a.number = GetCode(a.client, a.guid)
+		}
 	}
 
-	for t.PageNo*t.PageSize < t.CaseCount && len(cases) < t.PageSize {
+	for t.PageNo*t.PageSize < t.CaseCount && len(cases) >= t.PageSize {
 		t, _ = a.LoadNew(t.Params, t.PageNo+1, t.PageSize)
 		a.Query(t, false)
 	}
