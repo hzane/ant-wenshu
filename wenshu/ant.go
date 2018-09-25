@@ -171,7 +171,6 @@ func (a *ant) Query(t *task) {
 
 		a.SaveCases(cases)
 		json.NewEncoder(a.tasks).Encode(t)
-		//time.Sleep(time.Millisecond * time.Duration(rand.Intn(4000)+1200))
 		randSleep()
 		tries++
 		if t.StatusCode >= http.StatusInternalServerError {
@@ -179,7 +178,7 @@ func (a *ant) Query(t *task) {
 			a.number = GetCode(a.client, a.guid)
 		}
 		if t.StatusCode == http.StatusInternalServerError {
-			time.Sleep(time.Second * time.Duration(config.mean) * 10)
+			time.Sleep(time.Millisecond * time.Duration(config.mean) * 10)
 			a.client = tools.NewHTTPClient()
 			Criminal(a.client) // 种上cookie
 		}
@@ -191,7 +190,7 @@ func (a *ant) Query(t *task) {
 		a.causeExpand(t.Params)
 		return
 	}
-	for i := 2; i <= (t.CaseCount+t.PageSize-1)/t.PageSize; i++ {
+	for i := 2; i <= (t.CaseCount+t.PageSize-1)/t.PageSize && i < 10; i++ {
 		t, _ = a.LoadNew(t.Params, i, t.PageSize, true)
 		a.Query(t)
 	}

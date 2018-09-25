@@ -314,6 +314,7 @@ func ListContent(client *tools.Client, number, guid string,
 	vm := otto.New()
 	c, err := vmRunS(vm, string(b)) // javascript 字符串
 	if err != nil {
+		sc = http.StatusInternalServerError
 		return
 	}
 
@@ -327,9 +328,11 @@ func ListContent(client *tools.Client, number, guid string,
 	var result []map[string]interface{}
 	err = json.Unmarshal([]byte(c), &result)
 	if err != nil {
+		sc = http.StatusInternalServerError
 		return
 	}
 	if len(result) == 0 {
+		sc = http.StatusInternalServerError
 		return
 	}
 	scnt, _ := result[0]["Count"].(string)
@@ -338,6 +341,7 @@ func ListContent(client *tools.Client, number, guid string,
 	runeval, _ := result[0]["RunEval"].(string)
 	key, err := AESKey(runeval)
 	if err != nil {
+		sc = http.StatusInternalServerError
 		return
 	}
 	info("aes-key", key, err)
