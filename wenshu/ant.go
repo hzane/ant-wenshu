@@ -5,23 +5,22 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"gitlab.com/hearts.zhang/tools"
 	"io"
 	"io/ioutil"
-	"math/rand"
 	"net/http"
 	"os"
 	"path"
 	"strconv"
 	"strings"
 	"time"
-
-	"gitlab.com/hearts.zhang/tools"
 )
 
 type task struct {
 	ID            string `json:"id,omitempty"`
 	Params        string `json:"params,omitempty"`
 	Status        string `json:"status,omitempty"`
+	Expanded      bool   `json:"expanded,omitempty"`
 	StatusCode    int    `json:"status-code,omitempty"`
 	CaseCount     int    `json:"case-count,omitempty"`
 	PageNo        int    `json:"page-no,omitempty"`
@@ -75,17 +74,17 @@ func AntAll(repo, treefn string) (err error) {
 	// 		params := params + ",审判程序:" + instance.key
 
 	for _, high := range a.categories["法院地域"] {
-		t, _ := a.LoadNew(params+",法院层级:高级法院,法院地域:"+high.key, 1, config.pageSize)
-		a.Query(t, true)
+		t, _ := a.LoadNew(params+",法院层级:高级法院,法院地域:"+high.key, 1, config.pageSize, false)
+		a.Query(t)
 	}
 
 	for _, intermediate := range a.categories["中级法院"] {
-		t, _ := a.LoadNew(params+",法院层级:中级法院,中级法院:"+intermediate.key, 1, config.pageSize)
-		a.Query(t, true)
+		t, _ := a.LoadNew(params+",法院层级:中级法院,中级法院:"+intermediate.key, 1, config.pageSize, false)
+		a.Query(t)
 	}
 	for _, basic := range a.categories["基层法院"] {
-		t, _ := a.LoadNew(params+",法院层级:基层法院,基层法院:"+basic.key, 1, config.pageSize)
-		a.Query(t, true)
+		t, _ := a.LoadNew(params+",法院层级:基层法院,基层法院:"+basic.key, 1, config.pageSize, false)
+		a.Query(t)
 	}
 	// 	}
 	// 	}
@@ -147,7 +146,7 @@ func id(params string, pn, psz int) string {
 	return hex.EncodeToString(id[:]) + "-" + strconv.Itoa(pn) + "-" + strconv.Itoa(psz)
 }
 
-func (a *ant) LoadNew(params string, pn, psz int) (t *task, ok bool) {
+func (a *ant) LoadNew(params string, pn, psz int, expanded bool) (t *task, ok bool) {
 	id := id(params, pn, psz)
 	if t, ok = a.oks[id]; !ok {
 		t = &task{
@@ -155,12 +154,14 @@ func (a *ant) LoadNew(params string, pn, psz int) (t *task, ok bool) {
 			Params:   params,
 			PageNo:   pn,
 			PageSize: psz,
+			Expanded: expanded,
 		}
+		t.Expanded = t.Expanded || t.PageNo > 1
 	}
 	return
 }
 
-func (a *ant) Query(t *task, expand bool) {
+func (a *ant) Query(t *task) {
 	info(t.Params, t.CaseCount, t.PageNo)
 	var cases []map[string]interface{}
 	var tries int
@@ -170,42 +171,50 @@ func (a *ant) Query(t *task, expand bool) {
 
 		a.SaveCases(cases)
 		json.NewEncoder(a.tasks).Encode(t)
-		time.Sleep(time.Millisecond * time.Duration(rand.Intn(5000)+2000))
+		//time.Sleep(time.Millisecond * time.Duration(rand.Intn(4000)+1200))
+		randSleep()
 		tries++
 		if t.StatusCode >= http.StatusInternalServerError {
 			a.guid = GUID()
 			a.number = GetCode(a.client, a.guid)
 		}
+		if t.StatusCode == http.StatusInternalServerError {
+			time.Sleep(time.Second * time.Duration(config.mean) * 10)
+			a.client = tools.NewHTTPClient()
+			Criminal(a.client) // 种上cookie
+		}
 	}
-
-	for t.PageNo*t.PageSize < t.CaseCount && len(cases) >= t.PageSize {
-		t, _ = a.LoadNew(t.Params, t.PageNo+1, t.PageSize)
-		a.Query(t, false)
+	if t.PageNo > 1 {
+		return
 	}
-
-	if t.CaseCount > 20*t.PageSize && expand {
+	if t.CaseCount > 20*t.PageSize && !t.Expanded {
 		a.causeExpand(t.Params)
 		return
 	}
+	for i := 2; i <= (t.CaseCount+t.PageSize-1)/t.PageSize; i++ {
+		t, _ = a.LoadNew(t.Params, i, t.PageSize, true)
+		a.Query(t)
+	}
+
 	return
 }
 
 func (a *ant) causeExpand(params string) {
 	for _, cause := range a.categories["一级案由"] {
-		t, _ := a.LoadNew(params+",一级案由:"+cause.key, 1, config.pageSize)
-		a.Query(t, false)
+		t, _ := a.LoadNew(params+",一级案由:"+cause.key, 1, config.pageSize, true)
+		a.Query(t)
 	}
 	for _, cause := range a.categories["二级案由"] {
-		t, _ := a.LoadNew(params+",二级案由:"+cause.key, 1, config.pageSize)
-		a.Query(t, false)
+		t, _ := a.LoadNew(params+",二级案由:"+cause.key, 1, config.pageSize, true)
+		a.Query(t)
 	}
 	for _, cause := range a.categories["三级案由"] {
-		t, _ := a.LoadNew(params+",三级案由:"+cause.key, 1, config.pageSize)
-		a.Query(t, false)
+		t, _ := a.LoadNew(params+",三级案由:"+cause.key, 1, config.pageSize, true)
+		a.Query(t)
 	}
 	for _, cause := range a.categories["关键词"] {
-		t, _ := a.LoadNew(params+",关键词:"+cause.key, 1, config.pageSize)
-		a.Query(t, false)
+		t, _ := a.LoadNew(params+",关键词:"+cause.key, 1, config.pageSize, true)
+		a.Query(t)
 	}
 }
 

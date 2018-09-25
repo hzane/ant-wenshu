@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/robertkrimen/otto"
+	"gitlab.com/hearts.zhang/tools"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -13,10 +15,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/robertkrimen/otto"
-	"gitlab.com/hearts.zhang/tools"
 )
 
 func verb(method, uri string, resp *http.Response, err error) {
@@ -26,9 +24,6 @@ func verb(method, uri string, resp *http.Response, err error) {
 		status, cl = resp.Status, resp.ContentLength
 	}
 	info(cl, status, err, method, uri)
-}
-func randSleep() {
-	time.Sleep(time.Millisecond * time.Duration(rand.Intn(1000)))
 }
 
 // SubmitForm ...

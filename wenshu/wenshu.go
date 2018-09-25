@@ -370,7 +370,9 @@ func init() {
 	flag.StringVar(&config.tree, "tree", "trees.csv", "")
 	flag.IntVar(&config.workers, "workers", 1, "")
 	flag.IntVar(&config.pageNo, "page-no", 1, "")
-	flag.IntVar(&config.pageSize, "page-size", 10, "")
+	flag.IntVar(&config.pageSize, "page-size", 15, "")
+	flag.Float64Var(&config.stddev, "stddev", 2000.0, "")
+	flag.Float64Var(&config.mean, "mean", 1200.0, "")
 
 	flag.Parse()
 	config.guid = GUID()
@@ -393,6 +395,19 @@ var config struct {
 	createTree   bool
 	createParams bool
 	ant          bool
+	stddev       float64
+	mean         float64
+}
+
+func randSleep() {
+	x := rand.NormFloat64()*config.stddev + config.mean
+	if x < 500 {
+		x = 500
+	}
+	if x > config.mean+2*config.stddev {
+		x = config.mean + 2*config.stddev
+	}
+	time.Sleep(time.Millisecond * time.Duration(x))
 }
 
 const host = "http://wenshu.court.gov.cn"
