@@ -31,6 +31,11 @@ func main() {
 	client, guid := tools.NewHTTPClient(), GUID()
 	Home(client)
 	Criminal(client) // 种上cookie
+
+	if config.content {
+		AntContent(client, config.repo)
+	}
+
 	if config.showCookie {
 		vjkl5 := GetVJKL5FromCookie(client)
 		fmt.Println(vjkl5)
@@ -197,7 +202,11 @@ func CaseDetail(raw string) (doc map[string]interface{}, err error) {
 	vm := otto.New()
 
 	r1 := regexp.MustCompile(`JSON.stringify\((\{.*?\})\);`)
-	tmp := r1.FindStringSubmatch(raw)[0] // tmp is javascript json object, but we treat it as a json string
+	result := r1.FindStringSubmatch(raw)
+	if len(result) == 0 {
+		return
+	}
+	tmp := result[0] // tmp is javascript json object, but we treat it as a json string
 	tmp, err = vmRunS(vm, tmp)
 	err = json.Unmarshal([]byte(tmp), &doc)
 
@@ -248,7 +257,6 @@ func CaseContent(client *tools.Client, docID string) (summary map[string]interfa
 	resp, err := client.Get(uri.String(), ref.String())
 
 	if err != nil {
-		info(err)
 		return
 	}
 	defer resp.Body.Close()
@@ -366,6 +374,7 @@ func init() {
 	flag.BoolVar(&config.createTree, "create-tree", false, "create full tree")
 	flag.BoolVar(&config.createParams, "create-params", false, "")
 	flag.BoolVar(&config.ant, "ant", false, "")
+	flag.BoolVar(&config.content, "ant-content", false, "")
 	flag.StringVar(&config.params, "params", "", "list content with params")
 	flag.StringVar(&config.caseID, "case-id", "", "show case details with id")
 	flag.StringVar(&config.js, "js-dir", ".", "javascript file folder")
@@ -399,6 +408,7 @@ var config struct {
 	createTree   bool
 	createParams bool
 	ant          bool
+	content      bool
 	stddev       float64
 	mean         float64
 }

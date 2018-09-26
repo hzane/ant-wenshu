@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -229,6 +230,46 @@ func (a *ant) SaveCases(docs []map[string]interface{}) {
 			}
 		}
 	}
+}
+
+func AntContent(client *tools.Client, d string) {
+	filepath.Walk(d, func(pth string, fi os.FileInfo, err error) error {
+		if !fi.IsDir() && filepath.Ext(fi.Name()) == ".json" {
+			DownloadContent(client, pth)
+		}
+		return nil
+	})
+}
+
+func DownloadContent(client *tools.Client, pth string) (err error) {
+	target := strings.TrimSuffix(pth, filepath.Ext(pth)) + ".body"
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		return
+	}
+
+	f, err := os.Open(pth)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	var summary map[string]string
+	err = json.NewDecoder(f).Decode(&summary)
+	if err != nil {
+		return
+	}
+	id := summary["_id"]
+	if id == "" {
+		err = os.ErrInvalid
+		return
+	}
+	doc, err := CaseContent(client, id)
+
+	if doc != nil {
+		body, _ := json.Marshal(doc)
+		err = ioutil.WriteFile(target, body, 0644)
+	}
+	info(len(doc), err, id)
+	return
 }
 
 type NopWriter struct{}
