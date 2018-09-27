@@ -3,13 +3,11 @@ package main
 import (
 	"bytes"
 	"errors"
+	"github.com/otiai10/gosseract"
+	"gitlab.com/hearts.zhang/tools"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"strings"
-
-	"github.com/otiai10/gosseract"
-	"gitlab.com/hearts.zhang/tools"
 )
 
 // ValidateCode ...
@@ -39,15 +37,7 @@ func ValidateCode(client *tools.Client) (err error) {
 	if err != nil {
 		return
 	}
-	text = strings.Map(func(r rune) rune {
-		if r == 'B' {
-			return '8'
-		}
-		if r == 'O' {
-			return '0'
-		}
-		return r
-	}, text)
+
 	code := url.Values{
 		"ValidateCode": []string{text},
 	}

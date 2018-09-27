@@ -336,8 +336,12 @@ func ListContent(client *tools.Client, number, guid string,
 	var result []map[string]interface{}
 	err = json.Unmarshal([]byte(c), &result)
 	if err != nil {
+		c = strings.Replace(c, `\"`, `"`, -1)
+		err = json.Unmarshal([]byte(c), &result)
+	}
+	if err != nil {
+		info(c)
 		sc = http.StatusInternalServerError
-		return
 	}
 	if len(result) == 0 {
 		sc = http.StatusInternalServerError

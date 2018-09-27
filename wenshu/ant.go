@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"gitlab.com/hearts.zhang/tools"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -15,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gitlab.com/hearts.zhang/tools"
 )
 
 type task struct {
@@ -243,7 +244,7 @@ func AntContent(client *tools.Client, d string) {
 
 func DownloadContent(client *tools.Client, pth string) (err error) {
 	target := strings.TrimSuffix(pth, filepath.Ext(pth)) + ".body"
-	if _, err := os.Stat(target); !os.IsNotExist(err) {
+	if _, xerr := os.Stat(target); !os.IsNotExist(xerr) {
 		return
 	}
 
