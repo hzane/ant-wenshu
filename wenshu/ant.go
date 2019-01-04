@@ -313,6 +313,7 @@ func AntContent(client *tools.Client, d string) {
 	filepath.Walk(d, func(pth string, fi os.FileInfo, err error) error {
 		if !fi.IsDir() && filepath.Ext(fi.Name()) == ".json" {
 			DownloadContent(client, pth)
+			randSleep()
 		}
 		return nil
 	})
