@@ -1,4 +1,4 @@
-package main
+package wenshu_ant
 
 import (
 	"encoding/json"
@@ -21,7 +21,7 @@ import (
 	"gitlab.com/hearts.zhang/tools"
 )
 
-var info = log.Println
+
 
 func main() {
 	if config.ant {
@@ -94,11 +94,6 @@ func createTree(client *tools.Client, guid, number string) {
 
 }
 
-// Tag ...
-type Tag struct {
-	key string
-	cnt int
-}
 
 // 列表的嵌套结构
 func treeItemConvert(item map[string]interface{}, ret map[string][]Tag) {
@@ -223,24 +218,7 @@ func CaseDetail(raw string) (doc map[string]interface{}, err error) {
 	return
 }
 
-// Criminal ...
-func Criminal(client *tools.Client) {
-	if resp, err := client.Get(CriminalURL, host); err == nil {
-		io.Copy(ioutil.Discard, resp.Body)
-		resp.Body.Close()
-		info(resp.StatusCode, resp.Status, CriminalURL)
-	}
-}
 
-// Home ...
-func Home(client *tools.Client) {
-	// for set-cookie
-	if resp, err := client.Get(host, ""); err == nil {
-		io.Copy(ioutil.Discard, resp.Body)
-		resp.Body.Close()
-		info(resp.StatusCode, resp.Status, host)
-	}
-}
 
 // CaseContent ...
 // http://wenshu.court.gov.cn/content/content?DocID=d8952be5-e5a2-4b8b-b554-cccf5824617f&KeyWord=%E5%86
@@ -428,23 +406,6 @@ func randSleep() {
 	time.Sleep(time.Millisecond * time.Duration(x))
 }
 
-const host = "http://wenshu.court.gov.cn"
-
-// ...
-const (
-	CriminalURL          = host + "/List/List?sorttype=1&conditions=searchWord+1+AJLX++案件类型:刑事案件"
-	GetCodeURL           = host + "/ValiCode/GetCode"
-	TreeListURL          = host + "/List/TreeList"
-	ListContentURL       = host + "/List/ListContent"
-	TreeContentURL       = host + "/List/TreeContent"
-	ReasonTreeContentURL = host + "/List/ReasonTreeContent"
-	CourtTreeContentURL  = host + "/List/CourtTreeContent"
-	ValidateCodeURL      = host + "/User/ValidateCode"
-	CheckCodeURL         = host + "/Content/CheckVisitCode"
-	VisitRemindURL       = host + "/Html_Pages/VisitRemind.html"
-	CreateContentJSURL   = host + "/CreateContentJS/CreateContentJS.aspx"
-	ContentURL           = host + "/content/content"
-)
 
 // CaseSummary ...
 type CaseSummary struct {

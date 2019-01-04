@@ -1,13 +1,12 @@
-package main
+package wenshu
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/robertkrimen/otto"
-	"gitlab.com/hearts.zhang/tools"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -15,7 +14,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/robertkrimen/otto"
+	"gitlab.com/hearts.zhang/tools"
 )
+
+var info = log.Println
 
 func verb(method, uri string, resp *http.Response, err error) {
 	var status string
@@ -74,18 +78,6 @@ func VL5X(client *tools.Client) string {
 	return ret
 }
 
-// GetVJKL5FromCookie ...
-func GetVJKL5FromCookie(client *tools.Client) string {
-	uri, _ := url.Parse(host)
-	cookies := client.Jar.Cookies(uri)
-	for _, ck := range cookies {
-		if ck.Name == "vjkl5" {
-			return ck.Value
-		}
-	}
-	return ""
-}
-
 func pretty(jo interface{}) string {
 	b, _ := json.MarshalIndent(jo, "", "  ")
 	return string(b)
@@ -135,28 +127,6 @@ func AESKey(runeval string) (key string, err error) {
 	// setTimeout('com.str._KEY="a69e42871c4f499c930c755edbf6d7d1";',8000*Math.random());
 	r = regexp.MustCompile(`_KEY="(.*)";'`)
 	key = r.FindStringSubmatch(jss)[1]
-	return
-}
-
-// GetCode ...
-func GetCode(client *tools.Client, guid string) (number string) {
-	data := url.Values{}
-	data.Set("guid", guid)
-
-	req, _ := http.NewRequest("POST", GetCodeURL, bytes.NewBufferString(data.Encode()))
-	req.Header.Set("Origin", host)
-	req.Header.Set("Referer", host)
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := client.Do(req)
-	infoe(err, "get-code")
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	b, _ := ioutil.ReadAll(resp.Body)
-
-	number = string(b)
 	return
 }
 

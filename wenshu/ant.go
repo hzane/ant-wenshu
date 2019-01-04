@@ -1,13 +1,15 @@
-package main
+package wenshu
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -31,15 +33,89 @@ type task struct {
 	error         error
 }
 
+// Tag ...
+type Tag struct {
+	key string
+	cnt int
+}
+
+const host = "http://wenshu.court.gov.cn"
+
+// ...
+const (
+	CriminalURL          = host + "/List/List?sorttype=1&conditions=searchWord+1+AJLX++案件类型:刑事案件"
+	GetCodeURL           = host + "/ValiCode/GetCode"
+	TreeListURL          = host + "/List/TreeList"
+	ListContentURL       = host + "/List/ListContent"
+	TreeContentURL       = host + "/List/TreeContent"
+	ReasonTreeContentURL = host + "/List/ReasonTreeContent"
+	CourtTreeContentURL  = host + "/List/CourtTreeContent"
+	ValidateCodeURL      = host + "/User/ValidateCode"
+	CheckCodeURL         = host + "/Content/CheckVisitCode"
+	VisitRemindURL       = host + "/Html_Pages/VisitRemind.html"
+	CreateContentJSURL   = host + "/CreateContentJS/CreateContentJS.aspx"
+	ContentURL           = host + "/content/content"
+)
+
 type ant struct {
 	client     *tools.Client
 	number     string
 	guid       string
 	repo       string
 	tree       string
+	vjkl5      string
 	tasks      io.WriteCloser
 	categories map[string][]Tag
 	oks        map[string]*task
+}
+
+func (a *ant) Home() {
+	// for set-cookie
+	if resp, err := a.client.Get(host, ""); err == nil {
+		_, _ = io.Copy(ioutil.Discard, resp.Body)
+		_ = resp.Body.Close()
+		info(resp.StatusCode, resp.Status, host)
+	}
+}
+
+// Criminal ...
+func (a *ant) Criminal() {
+	if resp, err := a.client.Get(CriminalURL, host); err == nil {
+		_, _ = io.Copy(ioutil.Discard, resp.Body)
+		_ = resp.Body.Close()
+		info(resp.StatusCode, resp.Status, CriminalURL)
+	}
+}
+
+// GetCode ...
+func (a *ant) GetCode() (number string) {
+	data := url.Values{}
+	data.Set("guid", a.guid)
+
+	req, _ := http.NewRequest("POST", GetCodeURL, bytes.NewBufferString(data.Encode()))
+	req.Header.Set("Origin", host)
+	req.Header.Set("Referer", host)
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := a.client.Do(req)
+	infoe(err, "get-code")
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	b, _ := ioutil.ReadAll(resp.Body)
+
+	number = string(b)
+	return
+}
+
+// GetVJKL5FromCookie ...
+func (a *ant) GetVJKL5FromCookie() string {
+	if cookie := a.client.GetCookie(host, "vjkl5"); cookie != nil {
+		a.vjkl5 = cookie.Value
+	}
+
+	return a.vjkl5
 }
 
 func AntAll(repo, treefn string) (err error) {
@@ -49,10 +125,10 @@ func AntAll(repo, treefn string) (err error) {
 		repo:   repo,
 		tree:   treefn,
 	}
-	Home(a.client)
-	Criminal(a.client) // 种上cookie
-	a.number = GetCode(a.client, a.guid)
-	vjkl5 := GetVJKL5FromCookie(a.client)
+	a.Home()
+	a.Criminal() // 种上cookie
+	a.number = a.GetCode()
+	vjkl5 := a.GetVJKL5FromCookie()
 	info(a.guid, a.number, vjkl5)
 
 	a.categories, _ = LoadTree(treefn)
