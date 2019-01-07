@@ -43,18 +43,11 @@ const host = "http://wenshu.court.gov.cn"
 
 // ...
 const (
-	CriminalURL          = host + "/List/List?sorttype=1&conditions=searchWord+1+AJLX++案件类型:刑事案件"
-	GetCodeURL           = host + "/ValiCode/GetCode"
-	TreeListURL          = host + "/List/TreeList"
-	ListContentURL       = host + "/List/ListContent"
-	TreeContentURL       = host + "/List/TreeContent"
-	ReasonTreeContentURL = host + "/List/ReasonTreeContent"
-	CourtTreeContentURL  = host + "/List/CourtTreeContent"
-	ValidateCodeURL      = host + "/User/ValidateCode"
-	CheckCodeURL         = host + "/Content/CheckVisitCode"
-	VisitRemindURL       = host + "/Html_Pages/VisitRemind.html"
-	CreateContentJSURL   = host + "/CreateContentJS/CreateContentJS.aspx"
-	ContentURL           = host + "/content/content"
+	CriminalURL     = host + "/List/List?sorttype=1&conditions=searchWord+1+AJLX++案件类型:刑事案件"
+	GetCodeURL      = host + "/ValiCode/GetCode"
+	ValidateCodeURL = host + "/User/ValidateCode"
+	CheckCodeURL    = host + "/Content/CheckVisitCode"
+	VisitRemindURL  = host + "/Html_Pages/VisitRemind.html"
 )
 
 type ant struct {
@@ -102,8 +95,9 @@ func (a *ant) GetCode() (number string) {
 	if err != nil {
 		return
 	}
-	defer resp.Body.Close()
+
 	b, _ := ioutil.ReadAll(resp.Body)
+	_ = resp.Body.Close()
 
 	number = string(b)
 	return
@@ -152,16 +146,16 @@ func AntAll(repo, treefn string) (err error) {
 	// 		params := params + ",审判程序:" + instance.key
 
 	for _, high := range a.categories["法院地域"] {
-		t, _ := a.LoadNew(params+",法院层级:高级法院,法院地域:"+high.key, 1, config.pageSize, false)
+		t, _ := a.LoadNew(params+",法院层级:高级法院,法院地域:"+high.key, 1, 10, false)
 		a.Query(t)
 	}
 
 	for _, intermediate := range a.categories["中级法院"] {
-		t, _ := a.LoadNew(params+",法院层级:中级法院,中级法院:"+intermediate.key, 1, config.pageSize, false)
+		t, _ := a.LoadNew(params+",法院层级:中级法院,中级法院:"+intermediate.key, 1, 10, false)
 		a.Query(t)
 	}
 	for _, basic := range a.categories["基层法院"] {
-		t, _ := a.LoadNew(params+",法院层级:基层法院,基层法院:"+basic.key, 1, config.pageSize, false)
+		t, _ := a.LoadNew(params+",法院层级:基层法院,基层法院:"+basic.key, 1, 10, false)
 		a.Query(t)
 	}
 	// 	}
@@ -278,19 +272,19 @@ func (a *ant) Query(t *task) {
 
 func (a *ant) causeExpand(params string) {
 	for _, cause := range a.categories["一级案由"] {
-		t, _ := a.LoadNew(params+",一级案由:"+cause.key, 1, config.pageSize, true)
+		t, _ := a.LoadNew(params+",一级案由:"+cause.key, 1, 10, true)
 		a.Query(t)
 	}
 	for _, cause := range a.categories["二级案由"] {
-		t, _ := a.LoadNew(params+",二级案由:"+cause.key, 1, config.pageSize, true)
+		t, _ := a.LoadNew(params+",二级案由:"+cause.key, 1, 10, true)
 		a.Query(t)
 	}
 	for _, cause := range a.categories["三级案由"] {
-		t, _ := a.LoadNew(params+",三级案由:"+cause.key, 1, config.pageSize, true)
+		t, _ := a.LoadNew(params+",三级案由:"+cause.key, 1, 10, true)
 		a.Query(t)
 	}
 	for _, cause := range a.categories["关键词"] {
-		t, _ := a.LoadNew(params+",关键词:"+cause.key, 1, config.pageSize, true)
+		t, _ := a.LoadNew(params+",关键词:"+cause.key, 1, 10, true)
 		a.Query(t)
 	}
 }
