@@ -21,14 +21,22 @@ import (
 // WenshuBrowser ...
 type WenshuBrowser struct {
 	http.Client
-	UserAgent      func() string
-	RewriteRequest func(*http.Request) *http.Request
-	js             *otto.Otto
-	guid           string
-	number         string
-	vl5x           string
-	counts         doc
-	tree           doc
+	UserAgent          func() string
+	RewriteRequest     func(*http.Request) *http.Request
+	js                 *otto.Otto
+	guid               string
+	number             string
+	vl5x               string
+	referer            string
+	Locations          []string // higher-courts.csv
+	intermediateCourts []string // intermediate-courts.csv
+	primaryCourts      []string // primary-courts.csv
+	causes             []string
+	levels             map[string]string //
+	types              map[string]string //
+	docTypes           map[string]string //
+	counts             doc
+	tree               doc
 }
 
 // NewWenshu ...
@@ -39,6 +47,33 @@ func NewWenshu(repo string) *WenshuBrowser {
 		RewriteRequest: nop,
 		guid:           GUID(),
 		js:             otto.New(),
+		levels: map[string]string{
+			"全部":   "all",
+			"最高法院": "1",
+			"高级法院": "2",
+			"中级法院": "3",
+			"基层法院": "4",
+		},
+		types: map[string]string{
+			"刑事案件": "1",
+			"民事案件": "2",
+			"行政案件": "3",
+			"赔偿案件": "4",
+			"执行案件": "5",
+		},
+		docTypes: map[string]string{
+			"全部":  "all",
+			"判决书": "1",
+			"裁定书": "2",
+			"调解书": "3",
+			"决定书": "4",
+			"通知书": "5",
+			"批复":  "6",
+			"答复":  "7",
+			"函":   "8",
+			"令":   "9",
+			"其他":  "10",
+		},
 	}
 	ret.Jar, _ = cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	_ = ret.RunJSFile(path.Join(repo, "base64.js"))
@@ -69,11 +104,66 @@ func (c *WenshuBrowser) Touch(uri string) error {
 func (c *WenshuBrowser) Home() error {
 	return c.Touch(WSPREFIX)
 }
-
-func (c *WenshuBrowser) Criminal() error {
+func (c *WenshuBrowser) QueryReferer(word, ay, fycj, spcx, ajlx, wslx, slfy, cprq string) string {
+	k := "conditions"
+	p := "searchWord %s %s  %s:%s"
+	params := url.Values{}
+	params.Set("sortType", "1")
+	if ay != "" {
+		if word == "" {
+			word = "002006002001002"
+		}
+		params.Add(k, fmt.Sprintf(p, word, "AY", "案由", ay))
+	}
+	if fycj != "" {
+		if word == "" {
+			word, _ = c.levels[fycj]
+		}
+		params.Add(k, fmt.Sprintf(p, word, "FYCJ", "法院层级", fycj))
+	}
+	if spcx != "" {
+		if word == "" {
+			word = "all_" + spcx
+		}
+		params.Add(k, fmt.Sprintf(p, word, "SPCX", "审判程序", spcx))
+	}
+	// 2019-01-09  TO  2019-01-10
+	if cprq != "" {
+		if word == "" {
+			word = " "
+		}
+		params.Add(k, fmt.Sprintf(p, word, "CPRQ", "裁判日期", cprq))
+	}
+	if ajlx != "" {
+		if word == "" {
+			word, _ = c.types[ajlx]
+		}
+		params.Add(k, fmt.Sprintf(p, word, "AJLX", "案件类型", ajlx))
+	}
+	if wslx != "" {
+		if word == "" {
+			word, _ = c.docTypes[wslx]
+		}
+		params.Add(k, fmt.Sprintf(p, word, "WSLX", "文书类型", wslx))
+	}
+	if slfy != "" {
+		word = slfy
+		params.Add(k, fmt.Sprintf(p, word, "SLFY", "法院名称", slfy))
+	}
+	if len(params[k]) == 0 {
+		params.Add(k, fmt.Sprintf(p, "1", "AJLX", "案件类型", "刑事案件"))
+	}
+	params.Set("number", c.number)
+	params.Set("guid", c.guid)
+	uri, _ := url.Parse(WSPREFIX + "/List/List")
+	uri.RawQuery = params.Encode()
+	c.referer = uri.String()
+	return c.referer
+}
+func (c *WenshuBrowser) ListList(word, ay, fycj, spcx, ajlx, wslx, slfy, cprq string) error {
 	// sorttype=1&conditions=searchWord+1+AJLX++案件类型:刑事案件
 	// uri := WSPREFIX + `/List/List?sorttype=1&conditions=searchWord+1+AJLX++%E6%A1%88%E4%BB%B6%E7%B1%BB%E5%9E%8B:%E5%88%91%E4%BA%8B%E6%A1%88%E4%BB%B6`
-	uri := uriq(WSPREFIX+"/List/List?sorttype=1", "conditions", "searchWord+1+AJLX++案件类型:刑事案件")
+	uri := c.QueryReferer(word, ay, fycj, spcx, ajlx, wslx, slfy, cprq)
 	return c.Touch(uri)
 }
 
@@ -82,9 +172,32 @@ func (c *WenshuBrowser) TreeList() (doc []map[string]interface{}, err error) {
 	req, _ := http.NewRequest("POST", uri, nil)
 	return c.DoJSN(req)
 }
-func (c *WenshuBrowser) TreeContent(kv ...string) (entries []map[string]interface{}, err error) {
+func (c *WenshuBrowser) TreeContent(ay, fycj, spcx, ajlx, wslx, slfy, cprq string) (entries []map[string]interface{}, err error) {
+	var params []string
+	if ay != "" {
+		params = append(params, "案由:"+ay)
+	}
+	if fycj != "" {
+		params = append(params, "法院层级:"+fycj)
+	}
+	if spcx != "" {
+		params = append(params, "审判程序:"+spcx)
+	}
+	// 2019-01-09  TO  2019-01-10
+	if cprq != "" {
+		params = append(params, "裁判日期:"+cprq)
+	}
+	if ajlx != "" {
+		params = append(params, "案件类型:"+ajlx)
+	}
+	if wslx != "" {
+		params = append(params, "文书类型:"+wslx)
+	}
+	if slfy != "" {
+		params = append(params, "法院名称:"+slfy)
+	}
 	data, err := c.Submit(WSPREFIX+"/List/TreeContent", "",
-		"Param", sparam(kv...), // "案件类型:刑事案件",
+		"Param", strings.Join(params, ","), // "案件类型:刑事案件",
 		"vl5x", c.vl5x,
 		"guid", c.guid,
 		"number", c.number)
@@ -213,17 +326,49 @@ func (c *WenshuBrowser) RunJSFile(fn string) error {
 }
 
 // ListContent "案件类型","刑事案件"
-func (c *WenshuBrowser) ListContent(idx string, order, direction string, kv ...string) (cases []doc, err error) {
+// word, ay, fycj, spcx, ajlx, wslx, cprq string
+func (c *WenshuBrowser) ListContent(
+	idx string, order, direction string, ay,
+	fycj, spcx, ajlx, wslx, slfy, cprq string) (cases []doc, err error) {
 	if order == "" {
-		order = "法院层级"
+		order = "裁判日期"
 	}
 	if direction == "" {
-		direction = "asc"
+		direction = "desc"
 	}
 	if idx == "" {
 		idx = "1"
 	}
-	data, err := c.Submit(WSPREFIX+"/List/ListContent", "", "Param", sparam(kv...),
+	var params []string
+	if ay != "" {
+		params = append(params, "案由:"+ay)
+	}
+	if fycj != "" {
+		params = append(params, "法院层级:"+fycj)
+	}
+	if spcx != "" {
+		params = append(params, "审判程序:"+spcx)
+	}
+	// 2019-01-09  TO  2019-01-10
+	if cprq != "" {
+		params = append(params, "裁判日期:"+cprq)
+	}
+	if ajlx != "" {
+		params = append(params, "案件类型:"+ajlx)
+	}
+	if wslx != "" {
+		params = append(params, "文书类型:"+wslx)
+	}
+	if slfy != "" {
+		params = append(params, "法院名称:"+slfy)
+	}
+	if len(params) == 0 {
+		params = append(params, "案件类型:刑事案件")
+	}
+	info("ListContent", idx, order, direction, "\n")
+	info(strings.Join(params, ","))
+	data, err := c.Submit(WSPREFIX+"/List/ListContent", "", "Param",
+		strings.Join(params, ","),
 		"Index", idx,
 		"Page", "10",
 		"Order", order,
@@ -259,6 +404,7 @@ func (c *WenshuBrowser) ListContent(idx string, order, direction string, kv ...s
 	}
 	return
 }
+
 func (c *WenshuBrowser) JSJSON(data []byte) (docs []doc, err error) {
 	s, err := c.JSString(data)
 	if err != nil {
@@ -329,7 +475,7 @@ func (c *WenshuBrowser) GetAllCountRefresh() error {
 
 func (c *WenshuBrowser) GetCode() (string, error) {
 	uri := WSPREFIX + `/ValiCode/GetCode`
-	body, err := c.Submit(uri, "guid", c.guid)
+	body, err := c.Submit(uri, "", "guid", c.guid)
 	c.number = string(body)
 	return c.number, err
 }
@@ -337,7 +483,9 @@ func (c *WenshuBrowser) GetCode() (string, error) {
 func (c *WenshuBrowser) Submit(uri, refer string, kv ...string) ([]byte, error) {
 	req, _ := http.NewRequest("POST", uri, form(kv...))
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-	req.Header.Set("Referer", refer)
+	if refer != "" {
+		req.Header.Set("Referer", refer)
+	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
 	resp, err := c.Do(req)
 	if err != nil {
@@ -367,14 +515,20 @@ func (c *WenshuBrowser) Do(req *http.Request) (*http.Response, error) {
 		req.Header.Set("user-agent", c.UserAgent())
 	}
 	if req.Header.Get("referer") == "" {
-		req.Header.Set("referer", REFERER)
+		req.Header.Set("referer", c.referer)
 	}
-	// printHeaders(req.Header)
+	info(req.Method, req.URL.String())
+	printHeaders(req.Header)
 	resp, err := c.Client.Do(req)
 	if err == nil && resp.StatusCode < http.StatusInternalServerError {
+		printHeaders(resp.Header)
 		return resp, err
 	}
-	return c.Client.Do(req) // try again
+	resp, err = c.Client.Do(req) // try again
+	if resp != nil {
+		printHeaders(resp.Header)
+	}
+	return resp, err
 }
 func (c *WenshuBrowser) DoData(req *http.Request) ([]byte, error) {
 	resp, err := c.Do(req)

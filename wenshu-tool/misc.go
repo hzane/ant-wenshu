@@ -21,7 +21,6 @@ func GUID() string {
 // WSPREFIX ...
 const (
 	WSPREFIX = "http://wenshu.court.gov.cn"
-	REFERER  = WSPREFIX + "/List/List?sorttype=1&conditions=searchWord+1+AJLX++%E6%A1%88%E4%BB%B6%E7%B1%BB%E5%9E%8B:%E5%88%91%E4%BA%8B%E6%A1%88%E4%BB%B6"
 	macc     = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_%d_%d) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%d.%d.%d.%d Safari/%d.%d`
 )
 
@@ -34,20 +33,15 @@ func macChrome() string {
 
 func form(kv ...string) io.Reader {
 	data := params(kv...)
+	printv(data)
 	return strings.NewReader(data.Encode())
 }
-
-func uriq(uri string, kv ...string) string {
-	u, err := url.Parse(uri)
-	if err != nil {
-		return uri
+func printv(vals url.Values) {
+	for k, items := range vals {
+		for _, item := range items {
+			info(k, item)
+		}
 	}
-	q := u.Query()
-	for i := 0; i < len(kv); i += 2 {
-		q.Add(kv[i], kv[i+1])
-	}
-	u.RawQuery = q.Encode()
-	return u.String()
 }
 
 func params(kv ...string) url.Values {
