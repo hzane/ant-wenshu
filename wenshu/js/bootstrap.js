@@ -1,42 +1,79 @@
 // 其中某些脚本依赖 window, document and setTimeout
-var document={};
-var window={
-    innerWidth:800,
-    innerHeight:600,
-    screenX:0,
-    screenY:0,
-    atob:1,
-    screen:{
+var document = {
+    cookie:{}
+};
+var _0x3e050f = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+var window = {
+    innerWidth: 800,
+    innerHeight: 600,
+    screenX: 0,
+    screenY: 0,
+    location: {},
+    atob: function (str) {
+        return Base64_Zip.atob(str);
+    },
+    alert: function (str) {
+        return str;
+    },
+    screen: {
         width: 1600,
         height: 1200,
-    }};
+    }
+};
+
+function atob(str) {
+    return Base64_Zip.atob(str);
+}
+
+function x2b(str) {
+    var a1 = String(str)['replace'](/=+$/, '');
+    for (var _0x46149c = 0x0, _0xf1b84f, _0xe5f135, _0x36914d = 0x0, _0x2a8f2b = '';
+         _0xe5f135 = a1['charAt'](_0x36914d++);
+         ~_0xe5f135 && (_0xf1b84f = _0x46149c % 0x4 ? _0xf1b84f * 0x40 + _0xe5f135 : _0xe5f135, _0x46149c++ % 0x4) ? _0x2a8f2b += String['fromCharCode'](0xff & _0xf1b84f >> (-0x2 * _0x46149c & 0x6)) : 0x0) {
+        _0xe5f135 = _0x3e050f['indexOf'](_0xe5f135);
+    }
+    return _0x2a8f2b;
+}
+
+function alert(str) {
+    return str;
+}
+
 function setTimeout(a, b) {
     eval(a);
 }
-function CrashRunEval(runeval){
+
+function CrashRunEval(runeval) {
     eval(unzip(runeval));
     return com.str._KEY
 }
-function CrashDOCID(did){
+
+function CrashDOCID(did) {
     return com.str.Decrypt(unzip(did));
 }
-function DynamicURI(){
+
+function DynamicURI() {
     return window.location;
 }
-function CrashTemplate(){
+
+function CrashTemplate() {
     return KTKY2RBD9NHPBCIHV9ZMEQQDARSLVFDU(template.toString());
 }
-function CrashChallenge(){
+
+function CrashChallenge() {
     var confirm = QWERTASDFGXYSF();
     return KTKY2RBD9NHPBCIHV9ZMEQQDARSLVFDU(confirm.toString());
 }
+
 var createGuid = function () {
     return (((1 + Math.random()) * 65536) | 0).toString(16).substring(1);
 }
+
 function CrashGUID() {
     var guid = createGuid() + createGuid() + '-' + createGuid() + '-' + createGuid() + createGuid() + '-' + createGuid() + createGuid() + createGuid();
     return guid;
 }
+
 function CrashVL5X(vjkl5) {
     var cookie = vjkl5;
 

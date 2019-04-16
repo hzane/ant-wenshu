@@ -66,7 +66,7 @@ func (wb *WenshuBrowser) GetCookie(name string) string {
 }
 
 // WZWSRedirect ...
-func WZWSRedirect(htm string, jse *otto.Otto) (uri, template, challenge string, err error) {
+func WZWSRedirect(htm string, jse *otto.Otto) (uri, challenge string, err error) {
 	var xs string
 	re := regexp.MustCompile(`(?s:<script type="text/javascript">(.*)</script>)`)
 	m := re.FindStringSubmatch(htm)
@@ -76,7 +76,6 @@ func WZWSRedirect(htm string, jse *otto.Otto) (uri, template, challenge string, 
 		xs = m[1]
 	}
 	_, err = JSRun(err, jse, xs)
-	template, err = JSCall(err, jse, "CrashTemplate")
 	challenge, err = JSCall(err, jse, "CrashChallenge")
 	uri, err = JSCall(err, jse, "DynamicURI")
 	return
@@ -86,8 +85,8 @@ func WZWSRedirect(htm string, jse *otto.Otto) (uri, template, challenge string, 
 // 完成一次重定向
 func (wb *WenshuBrowser) WZWSGet(uri, refer string) (body []byte, sc int, err error) {
 	var (
-		nuri                     string
-		cid, template, challenge string
+		nuri           string
+		cid, challenge string
 	)
 	body, sc, err = wb.c.GetTXT(uri, refer) // eval(.....)
 	if !strings.Contains(string(body), "请开启JavaScript并刷新该页") {
@@ -95,7 +94,7 @@ func (wb *WenshuBrowser) WZWSGet(uri, refer string) (body []byte, sc int, err er
 	}
 	if err == nil {
 		cid = wb.GetCookie("wzws_cid")
-		nuri, template, challenge, err = WZWSRedirect(string(body), wb.jse)
+		nuri, challenge, err = WZWSRedirect(string(body), wb.jse)
 	}
 	if err != nil {
 		return
@@ -107,7 +106,6 @@ func (wb *WenshuBrowser) WZWSGet(uri, refer string) (body []byte, sc int, err er
 
 	SetCookies(wb.c.Jar, wb.home,
 		"wzws_cid", cid,
-		"wzwstemplate", template,
 		"wzwschallenge", challenge)
 
 	body, sc, err = wb.c.GetTXT(nuri, uri)
@@ -147,6 +145,9 @@ func NewOtto(repo string) (jse *otto.Otto, err error) {
 		}
 		if err == nil {
 			_, err = jse.Run(string(data))
+		}
+		if err != nil {
+			log.Println(fn, err)
 		}
 	}
 	load(jse, "bootstrap.js")  // 导出的API
