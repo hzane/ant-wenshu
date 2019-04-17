@@ -1,14 +1,13 @@
 // 其中某些脚本依赖 window, document and setTimeout
 var document = {
-    cookie:{}
 };
-var _0x3e050f = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+
 var window = {
     innerWidth: 800,
     innerHeight: 600,
     screenX: 0,
     screenY: 0,
-    location: {},
+    location: "",
     atob: function (str) {
         return Base64_Zip.atob(str);
     },
@@ -23,16 +22,6 @@ var window = {
 
 function atob(str) {
     return Base64_Zip.atob(str);
-}
-
-function x2b(str) {
-    var a1 = String(str)['replace'](/=+$/, '');
-    for (var _0x46149c = 0x0, _0xf1b84f, _0xe5f135, _0x36914d = 0x0, _0x2a8f2b = '';
-         _0xe5f135 = a1['charAt'](_0x36914d++);
-         ~_0xe5f135 && (_0xf1b84f = _0x46149c % 0x4 ? _0xf1b84f * 0x40 + _0xe5f135 : _0xe5f135, _0x46149c++ % 0x4) ? _0x2a8f2b += String['fromCharCode'](0xff & _0xf1b84f >> (-0x2 * _0x46149c & 0x6)) : 0x0) {
-        _0xe5f135 = _0x3e050f['indexOf'](_0xe5f135);
-    }
-    return _0x2a8f2b;
 }
 
 function alert(str) {
@@ -57,12 +46,11 @@ function DynamicURI() {
 }
 
 function CrashTemplate() {
-    return KTKY2RBD9NHPBCIHV9ZMEQQDARSLVFDU(template.toString());
+    return "unknown";
 }
 
 function CrashChallenge() {
-    var confirm = QWERTASDFGXYSF();
-    return KTKY2RBD9NHPBCIHV9ZMEQQDARSLVFDU(confirm.toString());
+    return "unknown";
 }
 
 var createGuid = function () {

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -18,8 +19,12 @@ import (
 
 func main() {
 	wb, err := NewWenshuBrowser("js")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	err = wb.Home()
-	fmt.Println("wzws-cid", err)
+	fmt.Println("home", err)
 
 	// vjkl5, vl5x, err := wb.RefreshVJKL5()
 	// fmt.Println(vjkl5, vl5x, err)
@@ -42,7 +47,7 @@ type WenshuBrowser struct {
 // NewWenshuBrowser ...
 func NewWenshuBrowser(repo string) (wb *WenshuBrowser, err error) {
 	u, _ := url.Parse(`http://wenshu.court.gov.cn/`)
-	ua := ants.UserAgent()
+	ua := `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3759.4 Safari/537.36`
 	wb = &WenshuBrowser{
 		home: u,
 		c: ants.NewHTTPClient(ants.HClientSettings{
@@ -65,58 +70,48 @@ func (wb *WenshuBrowser) GetCookie(name string) string {
 	return wb.c.GetCookie(wb.home.String(), name)
 }
 
-// WZWSRedirect ...
-func WZWSRedirect(htm string, jse *otto.Otto) (uri, challenge string, err error) {
-	var xs string
-	re := regexp.MustCompile(`(?s:<script type="text/javascript">(.*)</script>)`)
-	m := re.FindStringSubmatch(htm)
-	if len(m) != 2 {
-		err = fmt.Errorf(`cannot find wzws script`)
-	} else {
-		xs = m[1]
-	}
-	_, err = JSRun(err, jse, xs)
-	challenge, err = JSCall(err, jse, "CrashChallenge")
-	uri, err = JSCall(err, jse, "DynamicURI")
-	return
-}
-
-// WZWSGet ...
-// 完成一次重定向
-func (wb *WenshuBrowser) WZWSGet(uri, refer string) (body []byte, sc int, err error) {
+// Redirect ...
+func (wb *WenshuBrowser) WZWSCID(uri string) (string, error) {
 	var (
-		nuri           string
-		cid, challenge string
+		result []byte
+		u      *url.URL
+		err    error
+		sc     int
+		path   = strings.TrimPrefix(uri, "http://wenshu.court.gov.cn")
 	)
-	body, sc, err = wb.c.GetTXT(uri, refer) // eval(.....)
-	if !strings.Contains(string(body), "请开启JavaScript并刷新该页") {
-		return
+	result, err = exec.Command(`google-chrome-unstable`, "--headless", "--dump-dom", `http://localhost:18071`+path).Output()
+	cont := strings.TrimSpace(string(result))
+	cont = strings.TrimPrefix(cont, "<html><head></head><body>")
+	cont = strings.TrimSuffix(cont, "</body></html>")
+	uc := strings.SplitN(cont, "\n", 2)
+	if len(uc) != 2 {
+		err = fmt.Errorf("invalid dump-dom %s", cont)
+		return uri, err
 	}
+	for _, cookie := range strings.Split(uc[1], ";") {
+		cookie = strings.TrimSpace(cookie)
+		if ab := strings.SplitN(cookie, "=", 2); len(ab) == 2 {
+			SetCookies(wb.c.Jar, wb.home, ab[0], ab[1])
+			log.Println(ab[0], ab[1])
+		}
+	}
+
+	u, err = wb.home.Parse(uc[0])
 	if err == nil {
-		cid = wb.GetCookie("wzws_cid")
-		nuri, challenge, err = WZWSRedirect(string(body), wb.jse)
+		uri = u.String()
+		cid := wb.c.GetCookie(wb.home.String(), "wzws_cid")
+		_, sc, err = wb.c.GetTXT(u.String(), wb.home.String())
+		cid0 := wb.c.GetCookie(wb.home.String(), "wzws_cid")
+		log.Println(cid == cid0, cid0)
 	}
-	if err != nil {
-		return
-	}
-
-	if u, e := wb.home.Parse(nuri); e == nil {
-		nuri = u.String()
-	}
-
-	SetCookies(wb.c.Jar, wb.home,
-		"wzws_cid", cid,
-		"wzwschallenge", challenge)
-
-	body, sc, err = wb.c.GetTXT(nuri, uri)
-
-	return
+	log.Println(sc, err)
+	return uri, err
 }
-
-// Home ...
 func (wb *WenshuBrowser) Home() error {
-	_, sc, err := wb.WZWSGet(wb.home.String(), "")
-	wb.Log("home", sc, err)
+	_, err := wb.WZWSCID(wb.home.String())
+	if err == nil {
+		_, _, err = wb.c.GetTXT(wb.home.String(), wb.home.String())
+	}
 	return err
 }
 
@@ -204,13 +199,18 @@ func (wb *WenshuBrowser) List(ajlx string) (cnt int64, ret []map[string]interfac
 		refer   = `http://wenshu.court.gov.cn/List/List?sorttype=1`
 		uri     = `http://wenshu.court.gov.cn/List/ListContent`
 		resp    []byte
+		sc      int
 		xs      string
 		runeval string
 		vl5x    string
 		vjkl5   string
 	)
 	refer = ants.MakeURI(refer, q("conditions", "searchWord 1 AJLX  "+param))
-	_, _, err = wb.c.GetTXT(refer, wb.home.String())
+	_, err = wb.WZWSCID(refer)
+	if err == nil {
+		resp, sc, err = wb.c.GetTXT(refer, refer)
+		log.Println(sc, err, string(resp))
+	}
 
 	vjkl5 = wb.GetCookie("vjkl5") // List页面会设置cookie vjkl5
 	vl5x, err = JSCall(err, wb.jse, "CrashVL5X", vjkl5)
@@ -227,6 +227,7 @@ func (wb *WenshuBrowser) List(ajlx string) (cnt int64, ret []map[string]interfac
 			"Param", param,
 		)
 	}
+	fmt.Println(string(resp))
 	xs, err = JSRun(err, wb.jse, string(resp))
 	if err == nil {
 		err = json.Unmarshal([]byte(xs), &ret)
