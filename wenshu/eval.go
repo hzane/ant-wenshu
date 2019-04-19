@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/robertkrimen/otto"
+	_ "github.com/robertkrimen/otto/underscore"
 	"gitlab.com/hearts.zhang/ants"
 )
 
@@ -23,11 +24,9 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	err = wb.Home()
-	fmt.Println("home", err)
-
-	// vjkl5, vl5x, err := wb.RefreshVJKL5()
-	// fmt.Println(vjkl5, vl5x, err)
+	_ = wb.LoadCookies()
+	// err = wb.Home()
+	// fmt.Println("home", err)
 
 	_, ret, err := wb.List("刑事案件")
 	fmt.Println(err)
@@ -47,16 +46,24 @@ type WenshuBrowser struct {
 // NewWenshuBrowser ...
 func NewWenshuBrowser(repo string) (wb *WenshuBrowser, err error) {
 	u, _ := url.Parse(`http://wenshu.court.gov.cn/`)
+	// User-Agent在后面的xhr请求中被严格验证，所以在所有请求中应该保持ua一致
 	ua := `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3759.4 Safari/537.36`
 	wb = &WenshuBrowser{
 		home: u,
 		c: ants.NewHTTPClient(ants.HClientSettings{
 			UserAgent: func() string { return ua },
+			Rewrite: func(r *http.Request) *http.Request {
+				// 自定义的反向代理看到这个头后用自己记录下来的cookie更新请求中的cookie
+				r.Header.Add("use-wenshu-cookie", "4bd54ad7a845")
+				// r.Header.Add("use-wenshu-trailer", "4bd54ad7a845")
+				return r
+			},
 		}),
-		GUID: "7df4cd4f-0d91-23411994-4bd54ad7a845",
+		GUID: "7df4cd4f-0d91-23411994-4bd54ad7a845", // 好像没有地方验证 GUID的一致性
 		jse:  nil,
 		Log:  log.Println,
 	}
+
 	wb.jse, err = NewOtto(repo)
 	if err == nil {
 		_, _ = wb.RefreshGUID()
@@ -70,48 +77,41 @@ func (wb *WenshuBrowser) GetCookie(name string) string {
 	return wb.c.GetCookie(wb.home.String(), name)
 }
 
-// Redirect ...
+// :18071 是自定义的一个文书网反向代理，我们通过一个特殊的地址获取它记录下来的cookie
+func (wb *WenshuBrowser) LoadCookies() (err error) {
+	cookiesraw, sc, err := wb.c.GetTXT("http://localhost:18071/4bd54ad7a845/", "")
+	if err != nil {
+		return
+	}
+	var cookies [][2]string
+	for _, ck := range strings.Split(string(cookiesraw), "\n") {
+		if kv := strings.SplitN(ck, "=", 2); len(kv) == 2 {
+			kv[0] = strings.TrimSpace(kv[0])
+			kv[1] = strings.TrimSpace(kv[1])
+			cookies = append(cookies, [2]string{kv[0], kv[1]})
+		}
+	}
+	wb.c.UseCookie(wb.home.String(), cookies)
+
+	log.Println("fetch-cookie", sc, len(cookies), err)
+	return
+}
+
+// 逆向 sojson.v5没成功，所以我们通过无头chrome访问文书网的反向代理，通过代理记录wzws_cid和vjkl5
 func (wb *WenshuBrowser) WZWSCID(uri string) (string, error) {
 	var (
 		result []byte
-		u      *url.URL
 		err    error
-		sc     int
 		path   = strings.TrimPrefix(uri, "http://wenshu.court.gov.cn")
 	)
 	result, err = exec.Command(`google-chrome-unstable`, "--headless", "--dump-dom", `http://localhost:18071`+path).Output()
-	cont := strings.TrimSpace(string(result))
-	cont = strings.TrimPrefix(cont, "<html><head></head><body>")
-	cont = strings.TrimSuffix(cont, "</body></html>")
-	uc := strings.SplitN(cont, "\n", 2)
-	if len(uc) != 2 {
-		err = fmt.Errorf("invalid dump-dom %s", cont)
-		return uri, err
-	}
-	for _, cookie := range strings.Split(uc[1], ";") {
-		cookie = strings.TrimSpace(cookie)
-		if ab := strings.SplitN(cookie, "=", 2); len(ab) == 2 {
-			SetCookies(wb.c.Jar, wb.home, ab[0], ab[1])
-			log.Println(ab[0], ab[1])
-		}
-	}
-
-	u, err = wb.home.Parse(uc[0])
 	if err == nil {
-		uri = u.String()
-		cid := wb.c.GetCookie(wb.home.String(), "wzws_cid")
-		_, sc, err = wb.c.GetTXT(u.String(), wb.home.String())
-		cid0 := wb.c.GetCookie(wb.home.String(), "wzws_cid")
-		log.Println(cid == cid0, cid0)
+		err = wb.LoadCookies()
 	}
-	log.Println(sc, err)
-	return uri, err
+	return string(result), err
 }
 func (wb *WenshuBrowser) Home() error {
 	_, err := wb.WZWSCID(wb.home.String())
-	if err == nil {
-		_, _, err = wb.c.GetTXT(wb.home.String(), wb.home.String())
-	}
 	return err
 }
 
@@ -149,7 +149,7 @@ func NewOtto(repo string) (jse *otto.Otto, err error) {
 	load(jse, "sha1.js")       // sha1
 	load(jse, "md5.js")        // md5
 	load(jse, "base64.js")     // Base64
-	load(jse, "vl5x.js")       // CrashVL5X(vjkl5 string)
+	load(jse, "ListExtend.js") // CrashVL5X(vjkl5 string)
 	load(jse, "b64.js")        // Base64_unzip
 	load(jse, "aes.js")        // aes
 	load(jse, "rawdeflate.js") // unzip
@@ -192,34 +192,30 @@ func (wb *WenshuBrowser) RefreshGUID() (guid string, err error) {
 	return guid, err
 }
 
+// 只要反向代理成功访问过文书网，代理会记住所有的cookie
+// 程序需要vjkl5才能计算vl5x，这里的vjkl5是我们通过代理程序获得的
 func (wb *WenshuBrowser) List(ajlx string) (cnt int64, ret []map[string]interface{}, err error) {
 	var (
 		q       = ants.Q
 		param   = sparam("案件类型", ajlx)
-		refer   = `http://wenshu.court.gov.cn/List/List?sorttype=1`
-		uri     = `http://wenshu.court.gov.cn/List/ListContent`
+		refer   = `http://127.0.0.1:18071/List/List?sorttype=1`
+		uri     = `http://127.0.0.1:18071/List/ListContent`
 		resp    []byte
-		sc      int
 		xs      string
 		runeval string
 		vl5x    string
 		vjkl5   string
 	)
 	refer = ants.MakeURI(refer, q("conditions", "searchWord 1 AJLX  "+param))
-	_, err = wb.WZWSCID(refer)
-	if err == nil {
-		resp, sc, err = wb.c.GetTXT(refer, refer)
-		log.Println(sc, err, string(resp))
-	}
 
 	vjkl5 = wb.GetCookie("vjkl5") // List页面会设置cookie vjkl5
 	vl5x, err = JSCall(err, wb.jse, "CrashVL5X", vjkl5)
 	wb.Log("vjkl5 = ", vjkl5, ", vl5x = ", vl5x, err)
 
 	if err == nil {
-		resp, err = Submit(wb.c, uri, refer, "guid", wb.GUID,
+		resp, err = Submit(wb.c, uri, refer, "guid", "8e03feb9-3607-3ef93269-041032a56d4d",
 			"vl5x", vl5x,
-			"number", "wens",
+			"number", "loca",
 			"Order", "法院层级",
 			"Direction", "asc",
 			"Index", "1",
@@ -241,7 +237,8 @@ func (wb *WenshuBrowser) List(ajlx string) (cnt int64, ret []map[string]interfac
 		ret = ret[1:]
 	}
 	wb.Log("ListContent", cnt, len(ret), err)
-
+	// 文书网通过setTimeout更新com.str._KEY, 同时又在setTimeout中埋了一个循环
+	// 所以setTimeout简单判断了下需要eval的内容
 	_, err = JSCall(err, wb.jse, "CrashRunEval", runeval)
 
 	for _, kase := range ret {
